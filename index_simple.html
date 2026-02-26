@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>InsightX Analytics</title>
+    <link rel="stylesheet" href="styles/cursor-style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Left Sidebar -->
+        <aside class="left-sidebar" id="leftSidebar">
+            <div class="sidebar-header">
+                <div class="header-title">
+                    <i class="fas fa-database"></i>
+                    <span>COLUMNS</span>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="section-header">
+                    <span>Transaction Data</span>
+                    <div class="column-actions">
+                        <button class="column-action-btn" id="filterColumnsBtn" title="Filter">
+                            <i class="fas fa-filter"></i>
+                        </button>
+                        <button class="column-action-btn" id="searchColumnsBtn" title="Search">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="columnsList" class="columns-list">
+                    <div class="column-item">
+                        <i class="fas fa-key"></i>
+                        <span class="column-name">transaction_id</span>
+                        <span class="column-type">string</span>
+                    </div>
+                    <div class="column-item">
+                        <i class="fas fa-clock"></i>
+                        <span class="column-name">timestamp</span>
+                        <span class="column-type">datetime</span>
+                    </div>
+                    <div class="column-item">
+                        <i class="fas fa-exchange-alt"></i>
+                        <span class="column-name">transaction_type</span>
+                        <span class="column-type">category</span>
+                    </div>
+                    <div class="column-item">
+                        <i class="fas fa-store"></i>
+                        <span class="column-name">merchant_category</span>
+                        <span class="column-type">category</span>
+                    </div>
+                    <div class="column-item">
+                        <i class="fas fa-rupee-sign"></i>
+                        <span class="column-name">amount_inr</span>
+                        <span class="column-type">float</span>
+                    </div>
+                    <div class="column-item">
+                        <i class="fas fa-check-circle"></i>
+                        <span class="column-name">transaction_status</span>
+                        <span class="column-type">category</span>
+                    </div>
+                    <div class="column-item">
+                        <i class="fas fa-users"></i>
+                        <span class="column-name">sender_age_group</span>
+                        <span class="column-type">category</span>
+                    </div>
+                    <div class="column-item">
+                        <i class="fas fa-users"></i>
+                        <span class="column-name">receiver_age_group</span>
+                        <span class="column-type">category</span>
+                    </div>
+                    <div class="column-item">
+                        <i class="fas fa-map-marker-alt"></i>
+                        <span class="column-name">sender_state</span>
+                        <span class="column-type">string</span>
+                    </div>
+                    <div class="column-item">
+                        <i class="fas fa-university"></i>
+                        <span class="column-name">sender_bank</span>
+                        <span class="column-type">string</span>
+                    </div>
+                    <div class="column-item">
+                        <i class="fas fa-university"></i>
+                        <span class="column-name">receiver_bank</span>
+                        <span class="column-type">string</span>
+                    </div>
+                    <div class="column-item">
+                        <i class="fas fa-mobile-alt"></i>
+                        <span class="column-name">device_type</span>
+                        <span class="column-type">category</span>
+                    </div>
+                    <div class="column-item">
+                        <i class="fas fa-wifi"></i>
+                        <span class="column-name">network_type</span>
+                        <span class="column-type">category</span>
+                    </div>
+                    <div class="column-item">
+                        <i class="fas fa-flag"></i>
+                        <span class="column-name">fraud_flag</span>
+                        <span class="column-type">boolean</span>
+                    </div>
+                    <div class="column-item">
+                        <i class="fas fa-hourglass-half"></i>
+                        <span class="column-name">hour_of_day</span>
+                        <span class="column-type">int</span>
+                    </div>
+                    <div class="column-item">
+                        <i class="fas fa-calendar-day"></i>
+                        <span class="column-name">day_of_week</span>
+                        <span class="column-type">string</span>
+                    </div>
+                    <div class="column-item">
+                        <i class="fas fa-calendar-week"></i>
+                        <span class="column-name">is_weekend</span>
+                        <span class="column-type">boolean</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-footer">
+                <div class="status-indicator">
+                    <span id="connectionStatus" class="status-dot"></span>
+                    <span id="statusText">Disconnected</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Left Resize Handle -->
+        <div class="resize-handle left-resize" id="leftResize"></div>
+
+        <!-- Main Workspace -->
+        <main class="main-workspace">
+            <div class="workspace-header">
+                <div class="breadcrumb">
+                    <i class="fas fa-chart-line"></i>
+                    <span>InsightX Analytics</span>
+                </div>
+                <div class="workspace-actions">
+                    <button class="action-btn" id="refreshBtn" title="Refresh Data">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                    <button class="action-btn" id="exportBtn" title="Export Results">
+                        <i class="fas fa-download"></i>
+                    </button>
+                    <button class="action-btn" id="reportBtn" title="Generate Report">
+                        <i class="fas fa-file-pdf"></i>
+                    </button>
+                    <button class="action-btn" id="searchBtn" title="Search">
+                        <i class="fas fa-search"></i>
+                    </button>
+                    <button class="action-btn" id="clearWorkspaceBtn" title="Clear Workspace">
+                        <i class="fas fa-eraser"></i>
+                    </button>
+                    <button class="action-btn" id="settingsBtn" title="Settings">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                    <button class="action-btn" id="helpBtn" title="Help">
+                        <i class="fas fa-question-circle"></i>
+                    </button>
+                    <button class="action-btn" id="themeBtn" title="Toggle Theme">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="workspace-content" id="workspaceContent">
+                <div class="welcome-screen">
+                    <div class="welcome-icon">
+                        <i class="fas fa-chart-bar"></i>
+                    </div>
+                    <h1>Welcome to InsightX</h1>
+                    <p>AI-powered analytics for payment transaction data</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- Right Resize Handle -->
+        <div class="resize-handle right-resize" id="rightResize"></div>
+
+        <!-- Right Sidebar - Chat -->
+        <aside class="right-sidebar" id="rightSidebar">
+            <div class="sidebar-header">
+                <div class="header-title">
+                    <i class="fas fa-robot"></i>
+                    <span>AI ASSISTANT</span>
+                </div>
+                <div class="chat-actions">
+                    <button class="chat-action-btn" id="clearChatBtn" title="Clear Chat">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                    <button class="chat-action-btn" id="saveChatBtn" title="Save Conversation">
+                        <i class="fas fa-save"></i>
+                    </button>
+                    <button class="chat-action-btn" id="favoritesBtn" title="Favorites">
+                        <i class="fas fa-star"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="chat-container">
+                <div class="chat-messages" id="chatMessages">
+                    <div class="chat-message assistant">
+                        <div class="message-icon">
+                            <i class="fas fa-robot"></i>
+                        </div>
+                        <div class="message-content">
+                            <div class="message-text">
+                                <p>Hello! Load your dataset and ask me questions about your transaction data.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chat-input-container">
+                    <div class="model-selector">
+                        <label for="modelSelect">
+                            <i class="fas fa-brain"></i>
+                            <span>AI Model:</span>
+                        </label>
+                        <select id="modelSelect" class="model-dropdown">
+                            <option value="auto">Auto (Smart Selection)</option>
+                            <option value="deepseek-r1">DeepSeek R1 (Reasoning)</option>
+                            <option value="deepseek-chat">DeepSeek Chat (Fast)</option>
+                            <option value="gemini-flash">Gemini 2.5 Flash (Balanced)</option>
+                        </select>
+                        <label class="advanced-toggle">
+                            <input type="checkbox" id="advancedMode" />
+                            <span>Advanced Mode (10/10)</span>
+                        </label>
+                    </div>
+                    <div class="input-actions">
+                        <button class="input-action-btn" id="attachBtn" title="Attach File">
+                            <i class="fas fa-paperclip"></i>
+                        </button>
+                        <button class="input-action-btn" id="voiceBtn" title="Voice Input">
+                            <i class="fas fa-microphone"></i>
+                        </button>
+                        <button class="input-action-btn" id="quickStatsBtn" title="Quick Stats">
+                            <i class="fas fa-chart-bar"></i>
+                        </button>
+                    </div>
+                    <div class="chat-input-wrapper">
+                        <textarea id="chatInput" placeholder="Ask a question..." rows="1"></textarea>
+                        <button id="sendMessage" class="send-btn">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <script src="renderer_simple.js"></script>
+</body>
+</html>
