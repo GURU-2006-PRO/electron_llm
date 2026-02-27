@@ -1,60 +1,66 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
 
 let mainWindow;
-let pythonProcess;
 
 function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false
-    },
-    title: 'InsightX - Leadership Analytics'
-  });
+    mainWindow = new BrowserWindow({
+        width: 1400,
+        height: 900,
+        minWidth: 1200,
+        minHeight: 700,
+        backgroundColor: '#1e1e1e',
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false,
+            enableRemoteModule: true
+        },
+        icon: path.join(__dirname, 'assets/icon.png'),
+        frame: true,
+        titleBarStyle: 'default',
+        show: false
+    });
 
-  mainWindow.loadFile('index_simple.html');
-  mainWindow.webContents.openDevTools();
+    // Load the index file
+    mainWindow.loadFile('index_simple.html');
 
-  mainWindow.on('closed', function () {
-    mainWindow = null;
-  });
+    // Show window when ready
+    mainWindow.once('ready-to-show', () => {
+        mainWindow.show();
+    });
+
+    // Open DevTools in development mode
+    if (process.argv.includes('--dev')) {
+        mainWindow.webContents.openDevTools();
+    }
+
+    mainWindow.on('closed', () => {
+        mainWindow = null;
+    });
 }
 
-function startPythonBackend() {
-  // Start Python Flask server
-  console.log('Starting Python backend...');
-  pythonProcess = spawn('python', ['backend/app_simple.py']);
-  
-  pythonProcess.stdout.on('data', (data) => {
-    console.log(`Python: ${data}`);
-  });
-  
-  pythonProcess.stderr.on('data', (data) => {
-    console.error(`Python Error: ${data}`);
-  });
-  
-  pythonProcess.on('error', (error) => {
-    console.error('Failed to start Python backend:', error);
-    console.log('Please start backend manually: cd backend && python app.py');
-  });
-}
+// Create window when app is ready
+app.whenReady().then(createWindow);
 
-app.whenReady().then(() => {
-  createWindow();
-  startPythonBackend();
-
-  app.on('activate', function () {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
+// Quit when all windows are closed
+app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+        app.quit();
+    }
 });
 
-app.on('window-all-closed', function () {
-  if (pythonProcess) {
-    pythonProcess.kill();
-  }
-  if (process.platform !== 'darwin') app.quit();
+// Re-create window on macOS when dock icon is clicked
+app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+    }
+});
+
+// Handle app errors
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });

@@ -76,7 +76,7 @@ async function autoLoadDataset() {
             </div>
         `;
         
-        addMessage('Dataset loaded! Ask me questions about your transaction data.', false);
+        // Dataset loaded - message removed
         console.log('Dataset ready:', response.data.rows, 'rows');
         
         // Load anomalies and show banner
