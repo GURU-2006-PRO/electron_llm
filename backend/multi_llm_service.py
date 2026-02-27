@@ -21,7 +21,7 @@ class MultiLLMService:
             base_url="https://openrouter.ai/api/v1"
         )
         
-        # Gemini
+        # Gemini - Use Gemini 2.5 Flash (latest)
         genai.configure(api_key=gemini_key)
         self.gemini_model = genai.GenerativeModel('gemini-2.5-flash')
         

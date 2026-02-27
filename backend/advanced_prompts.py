@@ -133,12 +133,49 @@ df.groupby('device_type').agg(
 )
 
 ════════════════════════════════════════════════════════════
-FEW-SHOT EXAMPLES
+FEW-SHOT EXAMPLES — NATURAL LANGUAGE PATTERNS
 ════════════════════════════════════════════════════════════
 Q: "Which transaction type has highest failure rate?"
 OPERATION: group_by_single
 GROUP_COL: transaction_type
 METRICS: count, failure_rate, avg_amount
+SORT_BY: failure_rate
+SORT_ASCENDING: false
+LIMIT: 10
+
+Q: "Top 20 transactions by amount"
+OPERATION: top_n_records
+FILTERS: null
+SORT_BY: amount (INR)
+SORT_ASCENDING: false
+LIMIT: 20
+METRICS: null
+CHART_TYPE: vertical_bar
+INTENT: listing
+NOTE: Return individual transaction records sorted by amount
+
+Q: "Show me the highest value transactions"
+OPERATION: top_n_records
+FILTERS: null
+SORT_BY: amount (INR)
+SORT_ASCENDING: false
+LIMIT: 20
+METRICS: null
+
+Q: "Give me top 10 banks by transaction volume"
+OPERATION: group_by_single
+GROUP_COL: sender_bank
+METRICS: count
+SORT_BY: total_count
+SORT_ASCENDING: false
+LIMIT: 10
+
+Q: "List transactions above 10000 rupees"
+OPERATION: filter_segment
+FILTERS: ["amount (INR) > 10000"]
+SORT_BY: amount (INR)
+SORT_ASCENDING: false
+LIMIT: 50
 
 Q: "Decompose weekend P2M Food 3G Android 18-25 failures"
 OPERATION: filter_segment
@@ -159,6 +196,58 @@ FILTER: device_type.isin(['Android', 'iOS'])
 GROUP_COL: device_type
 METRICS: count, failure_rate
 
+Q: "What are the most common transaction types?"
+OPERATION: group_by_single
+GROUP_COL: transaction_type
+METRICS: count
+SORT_BY: total_count
+SORT_ASCENDING: false
+
+Q: "Compare sender and receiver age groups"
+OPERATION: filter_then_group
+FILTER: transaction_type == 'P2P'
+GROUP_COL: ["sender_age_group", "receiver_age_group"]
+METRICS: count, avg_amount
+NOTE: Multiple columns for cross-tabulation
+
+Q: "Analyze transactions by bank, device type, and network"
+OPERATION: group_by_single
+GROUP_COL: ["sender_bank", "device_type", "network_type"]
+METRICS: count, failure_rate, avg_amount
+NOTE: Multi-dimensional grouping for complex analysis
+
+Q: "Show me failed transactions from HDFC"
+OPERATION: filter_segment
+FILTERS: ["transaction_status == 'FAILED'", "sender_bank == 'HDFC'"]
+SORT_BY: timestamp
+SORT_ASCENDING: false
+LIMIT: 50
+
+════════════════════════════════════════════════════════════
+NATURAL LANGUAGE UNDERSTANDING RULES
+════════════════════════════════════════════════════════════
+KEYWORDS TO OPERATIONS:
+- "top N", "highest", "largest", "biggest" → top_n_records or group_by_single
+- "show me", "list", "give me" → filter_segment or top_n_records
+- "compare", "vs", "versus" → filter_then_group or comparison
+- "which", "what" + "most/least" → group_by_single
+- "average", "mean", "total", "sum" → aggregation
+- "by [column]" → group_by_single with that column
+- "above", "below", "greater than", "less than" → filter_segment
+
+INTENT DETECTION:
+- If asking for individual records → operation: top_n_records or filter_segment
+- If asking for aggregated stats → operation: group_by_single or aggregation
+- If asking for comparison → operation: filter_then_group or comparison
+- If asking for insights → operation: filter_segment with metrics
+
+LIMIT DETECTION:
+- "top 5" → limit: 5
+- "top 10" → limit: 10
+- "top 20" → limit: 20
+- No number specified → limit: 15 (default)
+- "all" or "every" → limit: 100
+
 ════════════════════════════════════════════════════════════
 OUTPUT FORMAT — return ONLY valid JSON
 ════════════════════════════════════════════════════════════
@@ -168,15 +257,15 @@ no markdown, no extra text before or after the JSON.
 SUCCESS:
 {
   "status": "success",
-  "operation": "group_by_single|filter_then_group|filter_segment|aggregation|comparison",
+  "operation": "group_by_single|filter_then_group|filter_segment|aggregation|comparison|top_n_records",
   "filter_conditions": ["condition1", "condition2"] or null,
-  "group_by_column": "column_name" or null,
-  "metrics": ["count", "failure_rate", "avg_amount", "fraud_rate"],
+  "group_by_column": "column_name" or ["column1", "column2", "column3"] for multi-dimensional grouping,
+  "metrics": ["count", "failure_rate", "avg_amount", "fraud_rate"] or null,
   "sort_by": "column_name",
   "sort_ascending": true or false,
   "limit": 15,
   "chart_type": "horizontal_bar|vertical_bar|line|donut",
-  "intent": "comparison|trend|aggregation|segmentation|decomposition"
+  "intent": "comparison|trend|aggregation|segmentation|decomposition|listing"
 }
 
 ERROR:
@@ -186,9 +275,11 @@ ERROR:
   "suggestion": "what the user could ask instead"
 }
 
-IMPORTANT: Do not add any text outside the JSON object.
-For decomposition questions, use operation="filter_segment" and
-intent="decomposition". Never reject these questions.
+IMPORTANT: 
+- Do not add any text outside the JSON object
+- For "top N" queries, use operation="top_n_records" and set appropriate limit
+- For decomposition questions, use operation="filter_segment" and intent="decomposition"
+- Never reject valid questions - always try to interpret the user's intent
 """
 
 
@@ -207,136 +298,187 @@ def build_insight_prompt(global_stats: dict) -> str:
     p75 = global_stats['high_value_threshold']
     wknd_pct = global_stats['weekend_pct']
     
-    return f"""You are a Senior Payment Analytics Expert with 15 years of
-experience advising C-suite leaders of Indian digital payments
-companies. You are precise, data-driven, and never fabricate
-numbers.
+    return f"""You are a world-class Payment Analytics Expert with deep expertise
+in Indian digital payments. You provide insights that are:
+- CONTEXTUAL: Adapt your response style to the question type
+- CONCISE: Get to the point quickly, no fluff
+- ACTIONABLE: Focus on what matters for business decisions
+- HONEST: Say "insufficient data" when you can't be certain
 
 CRITICAL: Respond ONLY in English. Never use Chinese, Hindi, or any
 other language. All text must be in English only.
 
 ════════════════════════════════════════════════════════════
-REAL GLOBAL BENCHMARKS — FROM ACTUAL DATASET
-Use these for ALL impact calculations. Never estimate these.
+REAL PLATFORM BENCHMARKS (Use these for comparisons)
 ════════════════════════════════════════════════════════════
 Total transactions:         {total_tx:,}
 Total failures:             {total_fail:,}
-Total flagged for review:   {total_flag:,}
 Overall failure rate:       {fail_rate}%
 Overall fraud flag rate:    {fraud_rate}%
-Overall avg transaction:    ₹{avg_amt:,.0f}
+Average transaction:        ₹{avg_amt:,.0f}
 High value threshold (P75): ₹{p75:,.0f}
-Weekend transaction share:  {wknd_pct}%
+Weekend share:              {wknd_pct}%
 
 ════════════════════════════════════════════════════════════
-PAYMENT DOMAIN KNOWLEDGE
+RESPONSE STYLE GUIDE — ADAPT TO QUESTION TYPE
 ════════════════════════════════════════════════════════════
-TRANSACTION TYPES:
-- P2P = person-to-person transfer
-- P2M = merchant payment via UPI
-- Bill Payment = utility/insurance payment
-- Recharge = mobile/DTH top-up
 
-CRITICAL FACTS:
-- fraud_flag=1 means FLAGGED FOR REVIEW, NOT confirmed fraud
-- Cross-bank transfers fail more (inter-bank settlement)
-- 3G failures = network packet loss
-- 2AM-4AM spikes = scheduled bank maintenance
+1. SIMPLE FACT QUESTIONS (What/How many/Which)
+   → Direct answer first, then 2-3 key supporting facts
+   → Example: "HDFC has the highest volume with 37,485 transactions
+     (14.99% of total). This is 2.3x higher than the platform average.
+     Peak hours are 10 AM - 2 PM, accounting for 42% of their volume."
+
+2. COMPARISON QUESTIONS (Compare/Difference/vs)
+   → Lead with the key difference, then explain why
+   → Example: "Android has 2.1x higher failure rate than iOS (6.2% vs 2.9%).
+     Root cause: Android users more likely on 3G networks (34% vs 12% iOS).
+     Recommendation: Implement adaptive retry logic for 3G connections."
+
+3. TREND/PATTERN QUESTIONS (Trend/Pattern/Over time)
+   → Describe the pattern, quantify it, explain business impact
+   → Example: "Transaction volume peaks at 11 AM (15,234 tx/hour) and
+     drops 67% by 3 AM. This follows typical Indian consumer behavior.
+     Opportunity: Schedule maintenance during 2-4 AM window to minimize
+     impact (only 4.2% of daily volume)."
+
+4. WHY QUESTIONS (Why/Reason/Cause)
+   → State the phenomenon, then explain root cause with evidence
+   → Example: "Weekend P2M failures are 1.8x higher (8.9% vs 4.9%) because:
+     1. Merchant gateway capacity reduced on weekends (-30% staff)
+     2. Higher average transaction size (₹1,847 vs ₹1,234) triggers more
+        fraud checks
+     3. Cross-bank settlements slower (PSU banks reduce weekend operations)"
+
+5. RECOMMENDATION QUESTIONS (How to improve/Fix/Optimize)
+   → Problem → Root cause → Solution → Expected impact
+   → Example: "To reduce 3G failures (current: 12.3%):
+     Problem: Packet loss on 3G causes 67% of network failures
+     Solution: Implement exponential backoff retry (3 attempts, 2s/4s/8s)
+     Expected: Reduce 3G failures by 40-50% based on industry benchmarks
+     Priority: Quick win - 2 week implementation, affects 23% of users"
+
+6. ANALYSIS/INSIGHT QUESTIONS (Analyze/Insights/Deep dive)
+   → Multi-layered response: Pattern → Correlation → Impact → Action
+   → Use bullet points for clarity
+   → Include confidence level and data limitations
+
+════════════════════════════════════════════════════════════
+DOMAIN KNOWLEDGE (Indian Digital Payments)
+════════════════════════════════════════════════════════════
+- P2P = person-to-person, P2M = merchant payment
+- fraud_flag=1 means FLAGGED (not confirmed fraud)
 - PSU banks (SBI, PNB) have older systems than private banks
+- 3G failures = network packet loss
+- Cross-bank transfers fail more (inter-bank settlement delays)
 - High-value transactions trigger automated fraud checks
+- 2-4 AM = scheduled bank maintenance window
 
 ════════════════════════════════════════════════════════════
-MANDATORY REASONING CHAIN — FOLLOW ALL 7 STEPS
+QUALITY STANDARDS
 ════════════════════════════════════════════════════════════
-STEP 1 — STRONGEST SIGNAL
-Find the single value with largest variance from average.
-State: "Strongest signal is X at Y% vs Z% average"
-
-STEP 2 — CORRELATION DIRECTION
-Positive/Negative/None/Weak relationship across all values.
-If NONE: state this explicitly — it's valuable insight.
-
-STEP 3 — COMPOUND PATTERN CHECK
-Look for 2-3 column combinations where combined effect
-exceeds individual effects. Only if GENUINELY VISIBLE.
-
-STEP 4 — DOMAIN EXPLANATION
-WHY does this pattern exist in Indian payment context?
-If contradicts expectations, explain the deviation.
-
-STEP 5 — VOLUME IMPACT
-Calculate using data provided:
-Volume share = segment_count / {total_tx:,} * 100
-If count missing: state "insufficient data to compute"
-
-STEP 6 — RECOMMENDATION
-Specific to payment domain. Match root cause to solution:
-NETWORK  → retry logic, adaptive compression
-TIME     → maintenance notifications
-BANK     → intelligent routing, health scoring
-FRAUD    → step-up authentication
-MERCHANT → gateway capacity planning
-
-STEP 7 — CONFIDENCE SCORING (rule-based)
-High:   segment > 5% of volume AND variance > 10%
-Medium: segment 1-5% OR variance 5-10%
-Low:    segment < 1% OR variance < 5%
+✅ Use ONLY numbers from the data provided or global benchmarks
+✅ Calculate percentages: (segment_count / {total_tx:,}) * 100
+✅ Compare to benchmarks: "X% vs {fail_rate}% platform average"
+✅ State "insufficient data" when you can't compute something
+✅ Be specific: "HDFC" not "a major bank", "3G" not "slow networks"
+✅ Quantify impact: "affects 23% of users" not "many users"
+❌ NEVER fabricate numbers or percentages
+❌ NEVER use vague terms like "significant", "many", "often"
+❌ NEVER call fraud_flag=1 "confirmed fraud"
+❌ NEVER give generic advice without data backing
 
 ════════════════════════════════════════════════════════════
-OUTPUT FORMAT — RETURN THIS JSON ONLY
+OUTPUT FORMAT — ADAPTIVE JSON STRUCTURE
 ════════════════════════════════════════════════════════════
-CRITICAL: Return ONLY the JSON object below. No explanations,
-no markdown, no extra text before or after the JSON.
+Return ONLY valid JSON. No markdown, no extra text.
 
-{{
-  "direct_answer": "One sentence with key number",
+FOR SIMPLE QUESTIONS (fact, count, average):
+{{{{
+  "direct_answer": "One clear sentence with the key number",
   "key_stats": [
-    "Stat 1 with exact number",
-    "Stat 2 compared to global benchmark",
-    "Stat 3 — next important finding"
-  ],
-  "correlation": {{
-    "type": "positive|negative|none|weak",
-    "description": "Exact relationship observed",
-    "strength": "strong|moderate|weak|none"
-  }},
-  "pattern": "Main pattern with specific values",
-  "root_cause": "WHY this exists in Indian payment context",
-  "business_impact": {{
-    "segment_volume_pct": "X.X% of total OR insufficient data",
-    "failure_contribution_pct": "Y.Y% of failures OR insufficient data",
-    "cost_of_inaction": "Specific business consequence"
-  }},
-  "recommendation": {{
-    "what": "Specific problem with exact values",
-    "how": "Concrete technical solution",
-    "expected_improvement": "Conservative % OR insufficient data",
-    "priority": "Quick Win|Medium Term|Strategic",
-    "owner": "Engineering|Product|Operations"
-  }},
-  "data_limitations": "What this cannot tell us",
-  "follow_up_questions": [
-    "Specific drill-down question",
-    "Cross-reference question",
-    "Root cause validation question"
+    "Supporting fact 1 with specific number",
+    "Supporting fact 2 compared to benchmark",
+    "Supporting fact 3 if relevant"
   ],
   "confidence": "High|Medium|Low",
-  "confidence_reason": "Volume X.X%, variance Y.Y%"
-}}
+  "confidence_reason": "Why this confidence level"
+}}}}
 
-IMPORTANT: Do not add any text outside the JSON object.
+FOR COMPARISON QUESTIONS:
+{{{{
+  "direct_answer": "X is Y% higher/lower than Z",
+  "comparison_details": {{{{
+    "metric_a": "Value for first item",
+    "metric_b": "Value for second item",
+    "difference": "Absolute or percentage difference",
+    "significance": "Is this difference meaningful?"
+  }}}},
+  "root_cause": "Why this difference exists",
+  "recommendation": "What to do about it (if applicable)",
+  "confidence": "High|Medium|Low"
+}}}}
+
+FOR ANALYSIS/INSIGHT QUESTIONS:
+{{{{
+  "direct_answer": "Main finding in one sentence",
+  "key_insights": [
+    "Insight 1 with data",
+    "Insight 2 with comparison",
+    "Insight 3 with business impact"
+  ],
+  "pattern": "Describe the pattern observed",
+  "root_cause": "Why this pattern exists",
+  "business_impact": {{{{
+    "volume_affected": "X% of transactions OR insufficient data",
+    "financial_impact": "Specific consequence with numbers",
+    "urgency": "Critical|High|Medium|Low"
+  }}}},
+  "recommendation": {{{{
+    "action": "Specific solution",
+    "expected_improvement": "Conservative estimate OR insufficient data",
+    "implementation": "Quick Win|Medium Term|Strategic"
+  }}}},
+  "data_limitations": "What we cannot determine from this data",
+  "follow_up_questions": [
+    "Relevant drill-down question 1",
+    "Relevant drill-down question 2"
+  ],
+  "confidence": "High|Medium|Low",
+  "confidence_reason": "Data quality and sample size justification"
+}}}}
+
+FOR WHY QUESTIONS:
+{{{{
+  "direct_answer": "The main reason is X",
+  "contributing_factors": [
+    "Factor 1 with percentage contribution",
+    "Factor 2 with evidence",
+    "Factor 3 if applicable"
+  ],
+  "evidence": "Data points that support this explanation",
+  "confidence": "High|Medium|Low"
+}}}}
 
 ════════════════════════════════════════════════════════════
-ABSOLUTE RULES
+CONFIDENCE SCORING (Rule-Based)
 ════════════════════════════════════════════════════════════
-✅ Use ONLY numbers from data or global benchmarks above
-✅ State "insufficient data" when cannot compute
-✅ Report no correlation honestly when data shows none
-✅ Confidence must follow rule-based formula
-❌ NEVER fabricate % improvement numbers
-❌ NEVER call fraud_flag=1 "confirmed fraud"
-❌ NEVER give generic advice
-❌ NEVER overstate confidence
+High:   Sample size > 5% of total AND clear pattern (variance > 10%)
+Medium: Sample size 1-5% OR moderate pattern (variance 5-10%)
+Low:    Sample size < 1% OR weak pattern (variance < 5%)
+
+Always explain your confidence level based on data quality.
+
+════════════════════════════════════════════════════════════
+REMEMBER
+════════════════════════════════════════════════════════════
+- Adapt your response structure to the question type
+- Be concise but complete
+- Use specific numbers, not vague terms
+- Compare to benchmarks when relevant
+- State limitations honestly
+- Focus on actionable insights
+- Return ONLY the JSON object, no extra text
 """
 
 
@@ -436,44 +578,222 @@ def execute_pandas_query(df: pd.DataFrame, query_spec: dict) -> pd.DataFrame:
             # Parse and apply filter
             condition = condition.strip()
             
-            if '==' in condition:
-                parts = condition.split('==')
-                col = parts[0].strip()
-                val = parts[1].strip().strip("'\"")
+            try:
+                # Handle BETWEEN operator
+                if '.between(' in condition.lower():
+                    # Format: column.between(min, max)
+                    col = condition.split('.between')[0].strip()
+                    actual_col = column_map.get(col.lower().replace(' ', '_'), col)
+                    
+                    # Extract min and max values
+                    import re
+                    match = re.search(r'between\(([^,]+),\s*([^)]+)\)', condition, re.IGNORECASE)
+                    if match and actual_col in result.columns:
+                        min_val = float(match.group(1).strip())
+                        max_val = float(match.group(2).strip())
+                        result = result[(result[actual_col] >= min_val) & (result[actual_col] <= max_val)]
                 
-                # Map column name to actual column
-                actual_col = column_map.get(col.lower().replace(' ', '_'), col)
+                # Handle string contains
+                elif '.str.contains(' in condition:
+                    # Format: column.str.contains('value')
+                    col = condition.split('.str.contains')[0].strip()
+                    actual_col = column_map.get(col.lower().replace(' ', '_'), col)
+                    
+                    import re
+                    match = re.search(r"contains\(['\"]([^'\"]+)['\"]\)", condition)
+                    if match and actual_col in result.columns:
+                        search_val = match.group(1)
+                        result = result[result[actual_col].str.contains(search_val, case=False, na=False)]
                 
-                # Handle numeric values
-                if val.isdigit():
-                    val = int(val)
+                # Handle string startswith
+                elif '.str.startswith(' in condition:
+                    col = condition.split('.str.startswith')[0].strip()
+                    actual_col = column_map.get(col.lower().replace(' ', '_'), col)
+                    
+                    import re
+                    match = re.search(r"startswith\(['\"]([^'\"]+)['\"]\)", condition)
+                    if match and actual_col in result.columns:
+                        search_val = match.group(1)
+                        result = result[result[actual_col].str.startswith(search_val, na=False)]
                 
-                if actual_col in result.columns:
-                    result = result[result[actual_col] == val]
-                else:
-                    print(f"[WARNING] Column '{col}' not found. Available: {list(result.columns)}")
+                # Handle string endswith
+                elif '.str.endswith(' in condition:
+                    col = condition.split('.str.endswith')[0].strip()
+                    actual_col = column_map.get(col.lower().replace(' ', '_'), col)
+                    
+                    import re
+                    match = re.search(r"endswith\(['\"]([^'\"]+)['\"]\)", condition)
+                    if match and actual_col in result.columns:
+                        search_val = match.group(1)
+                        result = result[result[actual_col].str.endswith(search_val, na=False)]
                 
-            elif '.notna()' in condition:
-                col = condition.replace('.notna()', '').strip()
-                actual_col = column_map.get(col.lower().replace(' ', '_'), col)
-                if actual_col in result.columns:
-                    result = result[result[actual_col].notna()]
+                # Handle date range filtering
+                elif 'timestamp' in condition.lower() and '>=' in condition:
+                    parts = condition.split('>=')
+                    col = parts[0].strip()
+                    date_val = parts[1].strip().strip("'\"")
+                    
+                    actual_col = column_map.get(col.lower().replace(' ', '_'), col)
+                    if actual_col in result.columns:
+                        result[actual_col] = pd.to_datetime(result[actual_col], errors='coerce')
+                        result = result[result[actual_col] >= pd.to_datetime(date_val)]
                 
-            elif '.isin' in condition:
-                # Handle .isin(['value1', 'value2'])
-                col = condition.split('.isin')[0].strip()
-                actual_col = column_map.get(col.lower().replace(' ', '_'), col)
-                values_str = condition.split('.isin')[1].strip('() ')
-                # Simple parsing - extract values between quotes
-                import re
-                values = re.findall(r"'([^']*)'", values_str)
-                if actual_col in result.columns:
-                    result = result[result[actual_col].isin(values)]
+                elif 'timestamp' in condition.lower() and '<=' in condition:
+                    parts = condition.split('<=')
+                    col = parts[0].strip()
+                    date_val = parts[1].strip().strip("'\"")
+                    
+                    actual_col = column_map.get(col.lower().replace(' ', '_'), col)
+                    if actual_col in result.columns:
+                        result[actual_col] = pd.to_datetime(result[actual_col], errors='coerce')
+                        result = result[result[actual_col] <= pd.to_datetime(date_val)]
+                
+                # Handle numeric comparisons
+                elif '>=' in condition:
+                    parts = condition.split('>=')
+                    col = parts[0].strip()
+                    val = parts[1].strip().strip("'\"")
+                    
+                    actual_col = column_map.get(col.lower().replace(' ', '_'), col)
+                    
+                    try:
+                        val = float(val)
+                    except ValueError:
+                        print(f"[WARNING] Cannot convert '{val}' to number for >= comparison")
+                        continue
+                    
+                    if actual_col in result.columns:
+                        result = result[result[actual_col] >= val]
+                
+                elif '<=' in condition:
+                    parts = condition.split('<=')
+                    col = parts[0].strip()
+                    val = parts[1].strip().strip("'\"")
+                    
+                    actual_col = column_map.get(col.lower().replace(' ', '_'), col)
+                    
+                    try:
+                        val = float(val)
+                    except ValueError:
+                        continue
+                    
+                    if actual_col in result.columns:
+                        result = result[result[actual_col] <= val]
+                
+                elif '>' in condition and '==' not in condition:
+                    parts = condition.split('>')
+                    col = parts[0].strip()
+                    val = parts[1].strip().strip("'\"")
+                    
+                    actual_col = column_map.get(col.lower().replace(' ', '_'), col)
+                    
+                    try:
+                        val = float(val)
+                    except ValueError:
+                        continue
+                    
+                    if actual_col in result.columns:
+                        result = result[result[actual_col] > val]
+                
+                elif '<' in condition and '==' not in condition:
+                    parts = condition.split('<')
+                    col = parts[0].strip()
+                    val = parts[1].strip().strip("'\"")
+                    
+                    actual_col = column_map.get(col.lower().replace(' ', '_'), col)
+                    
+                    try:
+                        val = float(val)
+                    except ValueError:
+                        continue
+                    
+                    if actual_col in result.columns:
+                        result = result[result[actual_col] < val]
+                
+                elif '==' in condition:
+                    parts = condition.split('==')
+                    col = parts[0].strip()
+                    val = parts[1].strip().strip("'\"")
+                    
+                    actual_col = column_map.get(col.lower().replace(' ', '_'), col)
+                    
+                    if val.replace('.', '').replace('-', '').isdigit():
+                        try:
+                            val = float(val) if '.' in val else int(val)
+                        except ValueError:
+                            pass
+                    
+                    if actual_col in result.columns:
+                        result = result[result[actual_col] == val]
+                    
+                elif '.notna()' in condition:
+                    col = condition.replace('.notna()', '').strip()
+                    actual_col = column_map.get(col.lower().replace(' ', '_'), col)
+                    if actual_col in result.columns:
+                        result = result[result[actual_col].notna()]
+                    
+                elif '.isin' in condition:
+                    col = condition.split('.isin')[0].strip()
+                    actual_col = column_map.get(col.lower().replace(' ', '_'), col)
+                    values_str = condition.split('.isin')[1].strip('() ')
+                    # Simple parsing - extract values between quotes
+                    import re
+                    values = re.findall(r"'([^']*)'", values_str)
+                    if actual_col in result.columns:
+                        result = result[result[actual_col].isin(values)]
+                
+            except Exception as e:
+                print(f"[ERROR] Failed to parse filter condition '{condition}': {e}")
+                import traceback
+                traceback.print_exc()
+                continue
     
     # For filter_segment operation (decomposition), return filtered data with breakdowns
     if query_spec.get('operation') == 'filter_segment':
-        # Return the filtered segment with key dimensions for analysis
-        # The LLM will analyze this to decompose contributions
+        # Sort if specified
+        if query_spec.get('sort_by'):
+            sort_col = query_spec['sort_by']
+            actual_sort_col = column_map.get(sort_col.lower().replace(' ', '_'), sort_col)
+            if actual_sort_col in result.columns:
+                result = result.sort_values(
+                    actual_sort_col,
+                    ascending=query_spec.get('sort_ascending', False)
+                )
+        
+        # Apply limit
+        limit = query_spec.get('limit')
+        if limit is not None and len(result) > limit:
+            result = result.head(limit)
+        
+        return result
+    
+    # Handle top_n_records operation (return individual records sorted)
+    if query_spec.get('operation') == 'top_n_records':
+        # Sort by specified column
+        if query_spec.get('sort_by'):
+            sort_col = query_spec['sort_by']
+            actual_sort_col = column_map.get(sort_col.lower().replace(' ', '_'), sort_col)
+            if actual_sort_col in result.columns:
+                result = result.sort_values(
+                    actual_sort_col,
+                    ascending=query_spec.get('sort_ascending', False)
+                )
+        
+        # Apply limit
+        limit = query_spec.get('limit', 20)
+        result = result.head(limit)
+        
+        # Select relevant columns for display
+        display_cols = []
+        for col in result.columns:
+            col_lower = col.lower()
+            # Include important columns
+            if any(keyword in col_lower for keyword in ['id', 'amount', 'type', 'status', 'bank', 'timestamp', 'category']):
+                display_cols.append(col)
+        
+        if display_cols:
+            result = result[display_cols]
+        
         return result
     
     # Handle aggregation operation (no groupby, just aggregate entire dataset)
@@ -513,6 +833,20 @@ def execute_pandas_query(df: pd.DataFrame, query_spec: dict) -> pd.DataFrame:
             agg_result['failure_rate_pct'] = (result[status_col] == 'FAILED').mean() * 100
         if 'avg_amount' in metrics and amount_col:
             agg_result['avg_amount'] = result[amount_col].mean()
+        if 'median_amount' in metrics and amount_col:
+            agg_result['median_amount'] = result[amount_col].median()
+        if 'std_amount' in metrics and amount_col:
+            agg_result['std_amount'] = result[amount_col].std()
+        if 'min_amount' in metrics and amount_col:
+            agg_result['min_amount'] = result[amount_col].min()
+        if 'max_amount' in metrics and amount_col:
+            agg_result['max_amount'] = result[amount_col].max()
+        if 'p25_amount' in metrics and amount_col:
+            agg_result['p25_amount'] = result[amount_col].quantile(0.25)
+        if 'p75_amount' in metrics and amount_col:
+            agg_result['p75_amount'] = result[amount_col].quantile(0.75)
+        if 'p95_amount' in metrics and amount_col:
+            agg_result['p95_amount'] = result[amount_col].quantile(0.95)
         if 'fraud_rate' in metrics and fraud_col:
             agg_result['fraud_flag_rate_pct'] = result[fraud_col].mean() * 100
         
@@ -522,11 +856,30 @@ def execute_pandas_query(df: pd.DataFrame, query_spec: dict) -> pd.DataFrame:
     # Group by if specified
     if query_spec.get('group_by_column'):
         group_col = query_spec['group_by_column']
-        actual_group_col = column_map.get(group_col.lower().replace(' ', '_'), group_col)
         
-        if actual_group_col not in result.columns:
-            print(f"[WARNING] Group column '{group_col}' not found")
-            return result
+        # Handle both single column (string) and multiple columns (list)
+        if isinstance(group_col, list):
+            # Multiple columns - map each one
+            actual_group_cols = []
+            for col in group_col:
+                actual_col = column_map.get(col.lower().replace(' ', '_'), col)
+                if actual_col in result.columns:
+                    actual_group_cols.append(actual_col)
+                else:
+                    print(f"[WARNING] Group column '{col}' not found")
+            
+            if not actual_group_cols:
+                print(f"[WARNING] No valid group columns found")
+                return result
+            
+            actual_group_col = actual_group_cols
+        else:
+            # Single column
+            actual_group_col = column_map.get(group_col.lower().replace(' ', '_'), group_col)
+            
+            if actual_group_col not in result.columns:
+                print(f"[WARNING] Group column '{group_col}' not found")
+                return result
         
         metrics = query_spec.get('metrics', ['count'])
         
@@ -568,6 +921,20 @@ def execute_pandas_query(df: pd.DataFrame, query_spec: dict) -> pd.DataFrame:
             )
         if 'avg_amount' in metrics and amount_col:
             agg_dict['avg_amount'] = (amount_col, 'mean')
+        if 'median_amount' in metrics and amount_col:
+            agg_dict['median_amount'] = (amount_col, 'median')
+        if 'std_amount' in metrics and amount_col:
+            agg_dict['std_amount'] = (amount_col, 'std')
+        if 'min_amount' in metrics and amount_col:
+            agg_dict['min_amount'] = (amount_col, 'min')
+        if 'max_amount' in metrics and amount_col:
+            agg_dict['max_amount'] = (amount_col, 'max')
+        if 'p25_amount' in metrics and amount_col:
+            agg_dict['p25_amount'] = (amount_col, lambda x: x.quantile(0.25))
+        if 'p75_amount' in metrics and amount_col:
+            agg_dict['p75_amount'] = (amount_col, lambda x: x.quantile(0.75))
+        if 'p95_amount' in metrics and amount_col:
+            agg_dict['p95_amount'] = (amount_col, lambda x: x.quantile(0.95))
         if 'fraud_rate' in metrics and fraud_col:
             agg_dict['fraud_flag_rate_pct'] = (
                 fraud_col,

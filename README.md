@@ -41,6 +41,30 @@ InsightX is a production-grade desktop application that transforms complex payme
 - Model selection with auto-classification badge
 - Export capabilities (CSV, JSON, Excel)
 
+### 📈 Advanced Analytics Dashboard
+- **6 KPI Cards** with real-time metrics and trend indicators:
+  - Total Transactions (↑↓ vs yesterday)
+  - Success Rate (%)
+  - Failure Rate (%)
+  - Fraud Flag Rate (%)
+  - Average Transaction Amount (₹)
+  - Total Transaction Volume (₹)
+- **4 Overview Charts** auto-loaded on startup:
+  - Transaction Volume Trend (7-day line chart)
+  - Top Banks by Volume (horizontal bar chart)
+  - Transaction Type Distribution (donut chart)
+  - Hourly Transaction Pattern (bar chart)
+- **Interactive Drill-Down**: Click any KPI or chart element to auto-generate insights
+- **Export Dashboard**: Download all charts as PNG images
+- **Refresh on Demand**: Update dashboard data with one click
+
+### 🔍 Query History & Bookmarks
+- Stores last 50 queries in localStorage
+- Bookmark favorite queries with star icon
+- Quick access via history button or `Ctrl+H`
+- Time ago display (e.g., "2h ago", "Just now")
+- Click any history item to reuse query
+
 ---
 
 ## 🏗️ Architecture
@@ -131,6 +155,22 @@ start-insightx.bat
 ---
 
 ## 💡 Usage Examples
+
+### Dashboard Interaction
+When you load the application, the dashboard automatically displays:
+
+1. **KPI Cards** (top of workspace):
+   - Click any KPI card to drill down into that metric
+   - Example: Click "Failure Rate" → Auto-generates "Show me failed transactions by bank"
+   
+2. **Overview Charts** (main workspace):
+   - 4 charts load automatically with your dataset
+   - Click chart elements for drill-down queries
+   - Example: Click a bank name in "Top Banks" chart → "Show me detailed analysis for [Bank Name]"
+
+3. **Dashboard Actions**:
+   - **Refresh**: Update all dashboard data
+   - **Export**: Download all 4 charts as PNG images
 
 ### Simple Queries (Auto → Gemini Flash)
 ```

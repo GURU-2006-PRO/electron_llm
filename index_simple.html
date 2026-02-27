@@ -137,6 +137,7 @@
                     <i class="fas fa-chart-line"></i>
                     <span>InsightX Analytics</span>
                 </div>
+                
                 <div class="workspace-actions">
                     <button class="action-btn" id="refreshBtn" title="Refresh Data">
                         <i class="fas fa-sync-alt"></i>
@@ -166,6 +167,9 @@
             </div>
 
             <div class="workspace-content" id="workspaceContent">
+                <!-- Dashboard Charts Container -->
+                <div id="dashboardCharts"></div>
+                
                 <div class="welcome-screen">
                     <div class="welcome-icon">
                         <i class="fas fa-chart-bar"></i>
@@ -214,44 +218,52 @@
                 </div>
 
                 <div class="chat-input-container">
-                    <div class="model-selector">
-                        <label for="modelSelect">
-                            <i class="fas fa-brain"></i>
-                            <span>AI Model:</span>
-                        </label>
-                        <select id="modelSelect" class="model-dropdown">
-                            <option value="auto">Auto (Smart Selection)</option>
-                            <option value="deepseek-r1">DeepSeek R1 (Reasoning)</option>
-                            <option value="deepseek-chat">DeepSeek Chat (Fast)</option>
-                            <option value="gemini-flash">Gemini 2.5 Flash (Balanced)</option>
-                        </select>
-                        <label class="advanced-toggle">
-                            <input type="checkbox" id="advancedMode" />
-                            <span>Advanced Mode (10/10)</span>
-                        </label>
-                    </div>
-                    <div class="input-actions">
-                        <button class="input-action-btn" id="attachBtn" title="Attach File">
-                            <i class="fas fa-paperclip"></i>
-                        </button>
-                        <button class="input-action-btn" id="voiceBtn" title="Voice Input">
-                            <i class="fas fa-microphone"></i>
-                        </button>
-                        <button class="input-action-btn" id="quickStatsBtn" title="Quick Stats">
-                            <i class="fas fa-chart-bar"></i>
-                        </button>
-                    </div>
-                    <div class="chat-input-wrapper">
-                        <textarea id="chatInput" placeholder="Ask a question..." rows="1"></textarea>
-                        <button id="sendMessage" class="send-btn">
-                            <i class="fas fa-paper-plane"></i>
-                        </button>
+                    <div class="chat-input-card">
+                        <!-- Textarea takes full width -->
+                        <textarea id="chatInput" placeholder="Ask a question or describe a task..." rows="1"></textarea>
+                        
+                        <!-- Bottom bar with controls -->
+                        <div class="chat-input-footer">
+                            <!-- Left side actions -->
+                            <div class="footer-left">
+                                <button class="footer-icon-btn" id="attachBtn" title="Attach File">
+                                    <i class="fas fa-paperclip"></i>
+                                </button>
+                                <button class="footer-icon-btn" id="historyBtn" title="Query History" onclick="showHistoryPanel()">
+                                    <i class="fas fa-history"></i>
+                                </button>
+                                <button class="footer-icon-btn" id="voiceBtn" title="Voice Input">
+                                    <i class="fas fa-microphone"></i>
+                                </button>
+                            </div>
+                            
+                            <!-- Right side controls -->
+                            <div class="footer-right">
+                                <select id="modelSelect" class="footer-model-select">
+                                    <option value="auto">Select Model</option>
+                                    <option value="deepseek-r1">DeepSeek R1</option>
+                                    <option value="deepseek-chat">DeepSeek Chat</option>
+                                    <option value="gemini-flash">Gemini 2.5 Flash</option>
+                                </select>
+                                
+                                <label class="footer-autopilot">
+                                    <span>Advanced</span>
+                                    <input type="checkbox" id="advancedMode" class="toggle-switch" />
+                                </label>
+                                
+                                <button id="sendMessage" class="footer-send-btn">
+                                    <i class="fas fa-arrow-up"></i>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </aside>
     </div>
 
+    <script src="chart-enhancements.js"></script>
+    <script src="dashboard.js"></script>
     <script src="renderer_simple.js"></script>
 </body>
 </html>
