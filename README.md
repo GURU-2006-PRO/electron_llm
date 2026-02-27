@@ -16,7 +16,7 @@ InsightX is a production-grade desktop application that transforms complex payme
 ### 🤖 Multi-Model AI Intelligence
 - **DeepSeek R1**: Advanced reasoning for complex decomposition analysis
 - **DeepSeek Chat**: Balanced speed and quality for moderate queries
-- **Gemini 2.5 Flash**: Lightning-fast responses for simple queries
+- **Gemini 3.0 Flash**: Lightning-fast responses for simple queries
 - **Auto-Classification**: Intelligent query routing based on complexity
 
 ### 📊 Interactive Visualizations
@@ -209,7 +209,7 @@ intervention plan with expected impact percentages for each step"
 
 | Model | Speed | Quality | Cost | Best For |
 |-------|-------|---------|------|----------|
-| **Gemini 2.5 Flash** | ⚡⚡⚡ | ⭐⭐⭐ | FREE | Simple aggregations, counts |
+| **Gemini 3.0 Flash** | ⚡⚡⚡ | ⭐⭐⭐ | FREE | Simple aggregations, counts |
 | **DeepSeek Chat** | ⚡⚡ | ⭐⭐⭐⭐ | $ | Comparisons, trends, filters |
 | **DeepSeek R1** | ⚡ | ⭐⭐⭐⭐⭐ | $$ | Decomposition, root cause, complex reasoning |
 | **Auto (Smart)** | Adaptive | Optimal | Efficient | Automatic classification |
@@ -229,7 +229,7 @@ GEMINI_API_KEY = "AIzaSy..."
 Configured in `backend/multi_llm_service.py`:
 1. DeepSeek R1 (primary)
 2. DeepSeek Chat (fallback)
-3. Gemini 2.5 Flash (final fallback)
+3. Gemini 3.0 Flash (final fallback)
 
 ### Query Classification
 Automatic routing based on:

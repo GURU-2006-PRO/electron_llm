@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pandas as pd
+import numpy as np
 import os
 import json
 import time
@@ -8,6 +9,32 @@ from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Helper function to convert numpy/pandas types to JSON-serializable types
+def make_json_serializable(obj):
+    """
+    Recursively convert numpy/pandas types to native Python types
+    """
+    if obj is None:
+        return None
+    elif isinstance(obj, (np.integer, np.int64, np.int32)):
+        return int(obj)
+    elif isinstance(obj, (np.floating, np.float64, np.float32)):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, (np.bool_, bool)):
+        return bool(obj)
+    elif isinstance(obj, dict):
+        return {key: make_json_serializable(value) for key, value in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [make_json_serializable(item) for item in obj]
+    elif isinstance(obj, pd.Series):
+        return obj.to_dict()
+    elif isinstance(obj, pd.DataFrame):
+        return obj.to_dict('records')
+    else:
+        return obj
 
 # Try to import Multi-LLM service
 try:
@@ -50,6 +77,9 @@ try:
 except ImportError as e:
     print(f"[WARNING] TIER 1 features not available: {e}")
     tier1_available = False
+
+# Geospatial features removed
+geospatial_available = False
 
 # Import database
 try:
@@ -350,18 +380,25 @@ def advanced_query():
         
         # STEP 1: Generate Pandas query specification
         print("[STEP 1] Generating query specification...")
+        print("[INFO] Using Gemini API for query generation")
         
-        query_resp = llm_service.openrouter_client.chat.completions.create(
-            model="deepseek/deepseek-chat",
-            max_tokens=1200,
-            temperature=0.1,
-            messages=[
-                {"role": "system", "content": PANDAS_GENERATION_PROMPT},
-                {"role": "user", "content": user_question}
-            ]
-        )
+        # Use Gemini API instead of OpenRouter
+        query_prompt = f"""{PANDAS_GENERATION_PROMPT}
+
+User Question: {user_question}
+
+Generate the query specification JSON."""
         
-        raw_query = query_resp.choices[0].message.content
+        try:
+            query_resp = llm_service.gemini_model.generate_content(query_prompt)
+            raw_query = query_resp.text
+        except Exception as e:
+            print(f"[ERROR] Gemini API failed for query generation: {e}")
+            return jsonify({
+                "status": "error",
+                "error": f"Gemini API error: {str(e)}"
+            })
+        
         raw_query = strip_fences(raw_query)
         
         print(f"[DEBUG] Raw query response (first 200 chars): {raw_query[:200]}")
@@ -572,19 +609,22 @@ Return ONLY valid JSON, no markdown, no extra text."""}
         if len(conversation_history) > 12:
             conversation_history = conversation_history[-12:]
         
-        return jsonify({
+        # Convert all data to JSON-serializable format
+        response_data = {
             "status": "success",
-            "insight": insight,
+            "insight": make_json_serializable(insight),
             "reasoning_chain": reasoning_chain,
             "data": result_df.to_dict('records'),
             "chart_type": query_spec.get("chart_type", "vertical_bar"),
             "intent": query_spec.get("intent", "analysis"),
             "model_used": insight_model,
             "rows_returned": len(result_df),
-            "statistical_insights": statistical_insights,
-            "methodology": methodology,
-            "proactive_suggestions": proactive_suggestions
-        })
+            "statistical_insights": make_json_serializable(statistical_insights),
+            "methodology": make_json_serializable(methodology),
+            "proactive_suggestions": make_json_serializable(proactive_suggestions)
+        }
+        
+        return jsonify(response_data)
         
     except json.JSONDecodeError as e:
         print(f"[ERROR] JSON parse error: {e}")
@@ -1049,177 +1089,6 @@ def get_dashboard_stats():
             "error": str(e)
         })
 
-@app.route('/dashboard-stats', methods=['GET'])
-def get_dashboard_stats():
-    """
-    Get dashboard statistics and overview data.
-    Returns KPIs with trends and overview charts data.
-    """
-    global df, dataset_loaded
-    
-    if not dataset_loaded:
-        return jsonify({"status": "error", "error": "Dataset not loaded"})
-    
-    try:
-        from datetime import datetime, timedelta
-        
-        # Find column names dynamically
-        amount_col = None
-        status_col = None
-        fraud_col = None
-        timestamp_col = None
-        bank_col = None
-        type_col = None
-        hour_col = None
-        
-        for col in df.columns:
-            col_lower = col.lower()
-            if 'amount' in col_lower and amount_col is None:
-                amount_col = col
-            elif 'status' in col_lower and status_col is None:
-                status_col = col
-            elif 'fraud' in col_lower and fraud_col is None:
-                fraud_col = col
-            elif 'timestamp' in col_lower or 'date' in col_lower and timestamp_col is None:
-                timestamp_col = col
-            elif 'bank' in col_lower and 'sender' in col_lower and bank_col is None:
-                bank_col = col
-            elif 'type' in col_lower and 'transaction' in col_lower and type_col is None:
-                type_col = col
-            elif 'hour' in col_lower and hour_col is None:
-                hour_col = col
-        
-        # Calculate KPIs (convert numpy types to Python types for JSON serialization)
-        total_transactions = int(len(df))
-        
-        # Success rate
-        if status_col:
-            success_count = int(df[df[status_col].str.lower() == 'success'].shape[0])
-            success_rate = float(round((success_count / total_transactions) * 100, 2))
-            failure_rate = float(round(100 - success_rate, 2))
-        else:
-            success_rate = 0.0
-            failure_rate = 0.0
-        
-        # Fraud rate
-        if fraud_col:
-            fraud_count = int(df[fraud_col].sum() if df[fraud_col].dtype == 'bool' else df[df[fraud_col] == 1].shape[0])
-            fraud_rate = float(round((fraud_count / total_transactions) * 100, 2))
-        else:
-            fraud_rate = 0.0
-        
-        # Average amount
-        if amount_col:
-            avg_amount = float(round(df[amount_col].mean(), 2))
-            total_volume = float(round(df[amount_col].sum(), 2))
-        else:
-            avg_amount = 0.0
-            total_volume = 0.0
-        
-        # Calculate trends (compare to yesterday - simplified to 5% random for demo)
-        import random
-        total_trend = float(round(random.uniform(-5, 10), 1))
-        success_trend = float(round(random.uniform(-2, 5), 1))
-        failure_trend = float(round(random.uniform(-5, 2), 1))
-        fraud_trend = float(round(random.uniform(-3, 1), 1))
-        amount_trend = float(round(random.uniform(-8, 12), 1))
-        volume_trend = float(round(random.uniform(-10, 15), 1))
-        
-        kpis = {
-            "total_transactions": total_transactions,
-            "total_trend": total_trend,
-            "success_rate": success_rate,
-            "success_trend": success_trend,
-            "failure_rate": failure_rate,
-            "failure_trend": failure_trend,
-            "fraud_rate": fraud_rate,
-            "fraud_trend": fraud_trend,
-            "avg_amount": avg_amount,
-            "amount_trend": amount_trend,
-            "total_volume": total_volume,
-            "volume_trend": volume_trend
-        }
-        
-        # Overview data
-        overview = {}
-        
-        # Transaction trend (last 7 days - simplified)
-        if timestamp_col:
-            try:
-                df_copy = df.copy()
-                df_copy[timestamp_col] = pd.to_datetime(df_copy[timestamp_col])
-                last_7_days = df_copy.sort_values(timestamp_col).tail(min(len(df), 50000))
-                daily_counts = last_7_days.groupby(last_7_days[timestamp_col].dt.date).size()
-                trend_dates = [str(d) for d in daily_counts.index[-7:]]
-                trend_values = [int(x) for x in daily_counts.values[-7:]]
-            except:
-                trend_dates = ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Day 7']
-                trend_values = [30000, 32000, 31500, 33000, 34500, 33800, 35000]
-        else:
-            trend_dates = ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Day 7']
-            trend_values = [30000, 32000, 31500, 33000, 34500, 33800, 35000]
-        
-        overview['trend'] = {
-            'dates': trend_dates,
-            'values': trend_values
-        }
-        
-        # Top banks (convert to Python types)
-        if bank_col:
-            top_banks = df[bank_col].value_counts().head(10)
-            overview['banks'] = {
-                'banks': [str(x) for x in top_banks.index.tolist()],
-                'values': [int(x) for x in top_banks.values.tolist()]
-            }
-        else:
-            overview['banks'] = {
-                'banks': ['Bank A', 'Bank B', 'Bank C', 'Bank D', 'Bank E'],
-                'values': [45000, 38000, 32000, 28000, 25000]
-            }
-        
-        # Transaction types (convert to Python types)
-        if type_col:
-            type_dist = df[type_col].value_counts().head(5)
-            overview['types'] = {
-                'types': [str(x) for x in type_dist.index.tolist()],
-                'values': [int(x) for x in type_dist.values.tolist()]
-            }
-        else:
-            overview['types'] = {
-                'types': ['P2P', 'Merchant', 'Bill Payment', 'Recharge'],
-                'values': [80000, 60000, 45000, 35000]
-            }
-        
-        # Hourly pattern (convert to Python types)
-        if hour_col:
-            hourly = df[hour_col].value_counts().sort_index()
-            overview['hourly'] = {
-                'hours': [f'{int(h):02d}:00' for h in hourly.index],
-                'values': [int(x) for x in hourly.values.tolist()]
-            }
-        else:
-            overview['hourly'] = {
-                'hours': [f'{h:02d}:00' for h in range(24)],
-                'values': [5000, 3000, 2000, 1500, 1200, 2500, 6000, 12000, 15000, 14000, 
-                          13000, 12500, 11000, 10500, 11500, 13000, 14500, 16000, 15500, 
-                          14000, 12000, 10000, 8000, 6500]
-            }
-        
-        return jsonify({
-            "status": "success",
-            "kpis": kpis,
-            "overview": overview
-        })
-        
-    except Exception as e:
-        print(f"[ERROR] Dashboard stats failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({
-            "status": "error",
-            "error": str(e)
-        })
-
 # ===== TIER 1 FEATURE ENDPOINTS =====
 
 @app.route('/anomalies', methods=['GET'])
@@ -1239,26 +1108,6 @@ def get_anomalies():
         })
     except Exception as e:
         print(f"[ERROR] Get anomalies failed: {e}")
-        return jsonify({"status": "error", "error": str(e)})
-
-@app.route('/query-suggestions', methods=['GET'])
-def get_query_suggestions():
-    """Get query suggestions for auto-complete"""
-    global tier1_manager
-    
-    if not tier1_manager:
-        return jsonify({"status": "error", "error": "TIER 1 features not available"})
-    
-    try:
-        partial_query = request.args.get('q', '')
-        suggestions = tier1_manager.get_query_suggestions(partial_query)
-        
-        return jsonify({
-            "status": "success",
-            "suggestions": suggestions
-        })
-    except Exception as e:
-        print(f"[ERROR] Get suggestions failed: {e}")
         return jsonify({"status": "error", "error": str(e)})
 
 @app.route('/expand-query', methods=['POST'])

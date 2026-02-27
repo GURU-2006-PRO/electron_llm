@@ -21,15 +21,15 @@ class MultiLLMService:
             base_url="https://openrouter.ai/api/v1"
         )
         
-        # Gemini - Use Gemini 2.5 Flash (latest)
+        # Gemini - Use Gemini 3 Flash (latest)
         genai.configure(api_key=gemini_key)
-        self.gemini_model = genai.GenerativeModel('gemini-2.5-flash')
+        self.gemini_model = genai.GenerativeModel('gemini-3-flash-preview')
         
         # Available models
         self.MODELS = {
             "deepseek-chat": "deepseek/deepseek-chat",
             "deepseek-r1": "deepseek/deepseek-r1",
-            "gemini-flash": "gemini-2.5-flash"
+            "gemini-flash": "gemini-3-flash-preview"
         }
         
         # Job storage for async processing
@@ -76,7 +76,7 @@ class MultiLLMService:
             r'\b(percentage|percent|proportion|ratio)\b'
         ]
         
-        print("[OK] Multi-LLM service initialized (DeepSeek + Gemini 2.5 Flash)")
+        print("[OK] Multi-LLM service initialized (DeepSeek + Gemini 3.0 Flash)")
         print("[OK] Intelligent query classification enabled")
     
     def classify_query(self, query):
@@ -84,7 +84,7 @@ class MultiLLMService:
         Classify query complexity and recommend best model
         
         Returns:
-            str: 'gemini-flash', 'deepseek-chat', or 'deepseek-r1'
+            str: 'gemini-flash' (always, since OpenRouter credits exhausted)
         """
         query_lower = query.lower()
         
@@ -104,23 +104,19 @@ class MultiLLMService:
         word_count = len(query.split())
         has_multiple_questions = query.count('?') > 1 or query.count(' and ') > 1
         
-        # Decision logic
+        # ALWAYS use Gemini since OpenRouter credits are exhausted
+        recommended = 'gemini-flash'
+        
         if complex_score >= 2 or (complex_score >= 1 and word_count > 15):
-            recommended = 'deepseek-r1'
-            reason = 'Complex analysis requiring deep reasoning'
+            reason = 'Complex analysis (using Gemini - OpenRouter unavailable)'
         elif simple_score >= 1 and complex_score == 0:
-            recommended = 'gemini-flash'
             reason = 'Simple query - using free Gemini'
         elif moderate_score >= 1 or (word_count > 10 and complex_score == 0):
-            recommended = 'deepseek-chat'
-            reason = 'Moderate complexity - fast response'
+            reason = 'Moderate complexity (using Gemini - OpenRouter unavailable)'
         elif has_multiple_questions:
-            recommended = 'deepseek-chat'
-            reason = 'Multiple questions - balanced approach'
+            reason = 'Multiple questions (using Gemini - OpenRouter unavailable)'
         else:
-            # Default to free Gemini for unknown patterns
-            recommended = 'gemini-flash'
-            reason = 'Default to free model'
+            reason = 'Default to free Gemini model'
         
         print(f"[CLASSIFY] Query: '{query[:50]}...'")
         print(f"[CLASSIFY] Scores - Simple: {simple_score}, Moderate: {moderate_score}, Complex: {complex_score}")
@@ -209,9 +205,9 @@ class MultiLLMService:
             }
     
     def _query_gemini(self, query, context):
-        """Query Gemini 2.5 Flash"""
+        """Query Gemini 3 Flash Preview"""
         try:
-            print(f"[INFO] Calling Gemini 2.5 Flash API...")
+            print(f"[INFO] Calling Gemini 3 Flash Preview API...")
             start_time = time.time()
             
             prompt = f"""You are a data analyst. Analyze this transaction data and provide insights.
@@ -546,7 +542,7 @@ Format your response with:
                 },
                 {
                     "id": "gemini-flash",
-                    "name": "Google Gemini 2.5 Flash",
+                    "name": "Google Gemini 3.0 Flash",
                     "description": "Fast & balanced (2-5s)",
                     "best_for": "General analysis, varied queries"
                 }

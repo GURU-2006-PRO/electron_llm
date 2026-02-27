@@ -79,6 +79,9 @@ async function autoLoadDataset() {
         addMessage('Dataset loaded! Ask me questions about your transaction data.', false);
         console.log('Dataset ready:', response.data.rows, 'rows');
         
+        // Load anomalies and show banner
+        await loadAnomalies();
+        
         // Initialize dashboard after dataset loads
         if (typeof initializeDashboard === 'function') {
             console.log('Initializing dashboard...');
@@ -89,6 +92,85 @@ async function autoLoadDataset() {
         console.error('Dataset check failed:', error);
         addMessage('Error: Dataset not loaded. Make sure transactions.csv is in backend/data/', false);
     }
+}
+
+// Load and display anomalies
+async function loadAnomalies() {
+    try {
+        const response = await axios.get(`${API_URL}/anomalies`);
+        if (response.data.status === 'success' && response.data.anomalies.length > 0) {
+            showAnomalyBanner(response.data.anomalies);
+        }
+    } catch (error) {
+        console.warn('Failed to load anomalies:', error);
+    }
+}
+
+// Show anomaly alert banner
+function showAnomalyBanner(anomalies) {
+    const topAnomaly = anomalies[0];
+    const banner = document.createElement('div');
+    banner.className = 'anomaly-banner';
+    banner.innerHTML = `
+        <div class="anomaly-banner-content">
+            <div class="anomaly-icon">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <div class="anomaly-text">
+                <strong>Anomaly Detected:</strong> ${topAnomaly.message}
+                <span class="anomaly-severity ${topAnomaly.severity}">${topAnomaly.severity.toUpperCase()}</span>
+            </div>
+            <button class="anomaly-view-all" onclick="showAllAnomalies()">
+                View All (${anomalies.length})
+            </button>
+            <button class="anomaly-close" onclick="this.parentElement.parentElement.remove()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `;
+    
+    // Insert at top of workspace
+    workspaceContent.insertBefore(banner, workspaceContent.firstChild);
+    
+    // Store anomalies globally
+    window.detectedAnomalies = anomalies;
+}
+
+// Show all anomalies
+function showAllAnomalies() {
+    if (!window.detectedAnomalies) return;
+    
+    const card = document.createElement('div');
+    card.className = 'output-card anomaly-card';
+    
+    let anomaliesHTML = '<div class="anomaly-list">';
+    window.detectedAnomalies.forEach((anomaly, index) => {
+        anomaliesHTML += `
+            <div class="anomaly-item ${anomaly.severity}">
+                <div class="anomaly-item-header">
+                    <span class="anomaly-severity-badge ${anomaly.severity}">${anomaly.severity}</span>
+                    <span class="anomaly-type">${anomaly.type.replace(/_/g, ' ')}</span>
+                </div>
+                <div class="anomaly-item-message">${anomaly.message}</div>
+                ${anomaly.recommendation ? `<div class="anomaly-item-recommendation">💡 ${anomaly.recommendation}</div>` : ''}
+            </div>
+        `;
+    });
+    anomaliesHTML += '</div>';
+    
+    card.innerHTML = `
+        <div class="output-header">
+            <div class="output-title">
+                <i class="fas fa-exclamation-triangle"></i>
+                Detected Anomalies (${window.detectedAnomalies.length})
+            </div>
+        </div>
+        <div class="output-body">
+            ${anomaliesHTML}
+        </div>
+    `;
+    
+    workspaceContent.insertBefore(card, workspaceContent.firstChild);
 }
 
 // Send message with streaming support
@@ -209,9 +291,39 @@ async function sendAdvancedQueryWithStreaming(query, model) {
             streamingContent.innerHTML = formattedInsight;
             chatMessages.scrollTop = chatMessages.scrollHeight;
             
+            // Store methodology data (TIER 1)
+            if (response.data.methodology) {
+                currentMethodology = response.data.methodology;
+            }
+            
+            // Show context indicator (TIER 1)
+            if (response.data.context_used) {
+                showContextIndicator(response.data.context_used);
+            }
+            
+            // Update conversation context
+            updateConversationContext(query, insight.direct_answer);
+            
             // Show reasoning chain if available
             if (response.data.reasoning_chain) {
                 showReasoningChain(response.data.reasoning_chain);
+            }
+            
+            // Show geospatial map if available
+            if (response.data.map_data) {
+                console.log('[MAP] Map data received, showing prompt');
+                showMapGenerationPrompt(response.data.map_data);
+
+            }
+            
+            // Show statistical insights if available (TIER 1)
+            if (response.data.statistical_insights) {
+                showStatisticalInsights(response.data.statistical_insights);
+            }
+            
+            // Show proactive suggestions if available (TIER 1)
+            if (response.data.proactive_suggestions) {
+                showProactiveSuggestions(response.data.proactive_suggestions);
             }
             
             // Show data visualization if available
@@ -359,9 +471,39 @@ async function sendAdvancedQuery(query, model) {
             
             addMessage(formattedInsight, false, modelInfo);
             
+            // Store methodology data (TIER 1)
+            if (response.data.methodology) {
+                currentMethodology = response.data.methodology;
+            }
+            
+            // Show context indicator (TIER 1)
+            if (response.data.context_used) {
+                showContextIndicator(response.data.context_used);
+            }
+            
+            // Update conversation context
+            updateConversationContext(query, insight.direct_answer);
+            
             // Show reasoning chain if available
             if (response.data.reasoning_chain) {
                 showReasoningChain(response.data.reasoning_chain);
+            }
+            
+            // Show geospatial map if available
+            if (response.data.map_data) {
+                console.log('[MAP] Map data received, showing prompt');
+                showMapGenerationPrompt(response.data.map_data);
+
+            }
+            
+            // Show statistical insights if available (TIER 1)
+            if (response.data.statistical_insights) {
+                showStatisticalInsights(response.data.statistical_insights);
+            }
+            
+            // Show proactive suggestions if available (TIER 1)
+            if (response.data.proactive_suggestions) {
+                showProactiveSuggestions(response.data.proactive_suggestions);
             }
             
             // Show data visualization if available
@@ -744,14 +886,25 @@ function formatAdvancedInsight(insight) {
         html += `</ul></div>`;
     }
     
-    // Comparison details (comparison questions)
+    // Comparison details (comparison questions) - ADD SIGNIFICANCE BADGES
     if (insight.comparison_details) {
         html += `<div class="insight-section comparison-box">
             <div class="comparison-grid">`;
         for (const [key, value] of Object.entries(insight.comparison_details)) {
+            let displayValue = value;
+            
+            // Check if this is a statistical significance field
+            if (key.toLowerCase().includes('significant') && typeof value === 'string') {
+                const isSignificant = value.toLowerCase().includes('yes') || value.toLowerCase().includes('true');
+                displayValue = `${value} <span class="significance-badge ${isSignificant ? 'significant' : 'not-significant'}">
+                    <i class="fas fa-${isSignificant ? 'check-circle' : 'times-circle'}"></i>
+                    ${isSignificant ? 'Statistically Significant' : 'Not Significant'}
+                </span>`;
+            }
+            
             html += `<div class="comparison-item">
                 <span class="comparison-label">${key.replace(/_/g, ' ')}</span>
-                <span class="comparison-value">${value}</span>
+                <span class="comparison-value">${displayValue}</span>
             </div>`;
         }
         html += `</div></div>`;
@@ -854,6 +1007,14 @@ function formatAdvancedInsight(insight) {
             ${insight.confidence_reason ? `<span class="confidence-reason"> — ${insight.confidence_reason}</span>` : ''}
         </div>`;
     }
+    
+    // Add methodology button (TIER 1 feature)
+    html += `<div class="insight-section">
+        <button class="methodology-btn" onclick="showMethodologyExplanation()">
+            <i class="fas fa-flask"></i>
+            Show Methodology
+        </button>
+    </div>`;
     
     html += `</div>`;
     return html;
@@ -1133,7 +1294,7 @@ function getModelName(modelValue) {
         'auto': 'Auto',
         'deepseek-r1': 'DeepSeek R1',
         'deepseek-chat': 'DeepSeek Chat',
-        'gemini-flash': 'Gemini 2.5 Flash',
+        'gemini-flash': 'Gemini 3.0 Flash',
         'gemini-pro': 'Gemini Pro',
         'deepseek/deepseek-r1': 'DeepSeek R1',
         'deepseek/deepseek-chat': 'DeepSeek Chat',
@@ -1161,11 +1322,15 @@ function addMessage(text, isUser, modelInfo = '') {
         formattedText = paragraphs.map(p => `<p>${p}</p>`).join('');
     }
     
+    // Add input/output label
+    const label = isUser ? '<div class="message-label input">INPUT</div>' : '<div class="message-label output">OUTPUT</div>';
+    
     messageDiv.innerHTML = `
         <div class="message-icon">
             <i class="fas fa-${isUser ? 'user' : 'robot'}"></i>
         </div>
         <div class="message-content formatted-response">
+            ${label}
             ${modelInfo}
             <div class="message-text">
                 ${formattedText}
@@ -1199,11 +1364,25 @@ function showStatistics(stats) {
     workspaceContent.insertBefore(card, workspaceContent.firstChild);
 }
 
+// Auto-complete state
+let autocompleteDropdown = null;
+let selectedSuggestionIndex = -1;
+let currentSuggestions = [];
+let autocompleteDebounceTimer = null;
+
 // Event listeners
 sendBtn.addEventListener('click', () => sendQuery(chatInput.value));
 chatInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
+        
+        // If suggestion is selected, use it
+        if (selectedSuggestionIndex >= 0 && currentSuggestions.length > 0) {
+            chatInput.value = currentSuggestions[selectedSuggestionIndex].query;
+            hideAutocomplete();
+            selectedSuggestionIndex = -1;
+        }
+        
         sendQuery(chatInput.value);
     }
 });
@@ -1223,6 +1402,33 @@ chatInput.addEventListener('input', function() {
     } else {
         this.style.overflowY = 'hidden';
     }
+    
+    // Trigger auto-complete with debounce
+    clearTimeout(autocompleteDebounceTimer);
+    autocompleteDebounceTimer = setTimeout(() => {
+        if (this.value.trim().length >= 3) {
+            fetchAutocompleteSuggestions(this.value.trim());
+        } else {
+            hideAutocomplete();
+        }
+    }, 300);
+});
+
+// Handle arrow keys for autocomplete navigation
+chatInput.addEventListener('keydown', (e) => {
+    if (!autocompleteDropdown) return;
+    
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        selectedSuggestionIndex = Math.min(selectedSuggestionIndex + 1, currentSuggestions.length - 1);
+        updateAutocompleteSelection();
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        selectedSuggestionIndex = Math.max(selectedSuggestionIndex - 1, -1);
+        updateAutocompleteSelection();
+    } else if (e.key === 'Escape') {
+        hideAutocomplete();
+    }
 });
 
 // Reset textarea height after sending
@@ -1230,6 +1436,489 @@ function resetTextareaHeight() {
     chatInput.style.height = 'auto';
     chatInput.style.overflowY = 'hidden';
 }
+
+// ===== AUTO-COMPLETE FUNCTIONALITY =====
+
+// Fetch autocomplete suggestions
+async function fetchAutocompleteSuggestions(query) {
+    try {
+        const response = await axios.get(`${API_URL}/query-suggestions?q=${encodeURIComponent(query)}&limit=8`);
+        
+        if (response.data.status === 'success') {
+            currentSuggestions = response.data.suggestions || [];
+            const typoCorrection = response.data.typo_correction;
+            
+            if (currentSuggestions.length > 0 || typoCorrection) {
+                showAutocomplete(currentSuggestions, typoCorrection);
+            } else {
+                hideAutocomplete();
+            }
+        }
+    } catch (error) {
+        console.warn('Autocomplete failed:', error);
+        hideAutocomplete();
+    }
+}
+
+// Show autocomplete dropdown
+function showAutocomplete(suggestions, typoCorrection) {
+    hideAutocomplete(); // Remove existing
+    
+    const inputContainer = document.querySelector('.chat-input-container');
+    autocompleteDropdown = document.createElement('div');
+    autocompleteDropdown.className = 'autocomplete-dropdown';
+    
+    let html = '';
+    
+    // Show typo correction if available
+    if (typoCorrection && typoCorrection.has_typo) {
+        html += `
+            <div class="autocomplete-typo">
+                Did you mean: <strong>${typoCorrection.suggestion}</strong>?
+            </div>
+        `;
+    }
+    
+    // Show suggestions
+    suggestions.forEach((suggestion, index) => {
+        html += `
+            <div class="autocomplete-item" data-index="${index}" onclick="selectSuggestion(${index})">
+                <div class="autocomplete-query">${suggestion.query}</div>
+                <div class="autocomplete-category">${suggestion.category}</div>
+            </div>
+        `;
+    });
+    
+    autocompleteDropdown.innerHTML = html;
+    inputContainer.appendChild(autocompleteDropdown);
+    
+    selectedSuggestionIndex = -1;
+}
+
+// Hide autocomplete dropdown
+function hideAutocomplete() {
+    if (autocompleteDropdown) {
+        autocompleteDropdown.remove();
+        autocompleteDropdown = null;
+    }
+    currentSuggestions = [];
+    selectedSuggestionIndex = -1;
+}
+
+// Update autocomplete selection
+function updateAutocompleteSelection() {
+    if (!autocompleteDropdown) return;
+    
+    const items = autocompleteDropdown.querySelectorAll('.autocomplete-item');
+    items.forEach((item, index) => {
+        if (index === selectedSuggestionIndex) {
+            item.classList.add('selected');
+            item.scrollIntoView({ block: 'nearest' });
+        } else {
+            item.classList.remove('selected');
+        }
+    });
+}
+
+// Select suggestion
+function selectSuggestion(index) {
+    if (index >= 0 && index < currentSuggestions.length) {
+        chatInput.value = currentSuggestions[index].query;
+        hideAutocomplete();
+        chatInput.focus();
+    }
+}
+
+// Close autocomplete when clicking outside
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.chat-input-container')) {
+        hideAutocomplete();
+    }
+});
+
+// ===== METHODOLOGY EXPLANATION =====
+
+// Store current methodology data
+let currentMethodology = null;
+
+// Show methodology explanation
+function showMethodologyExplanation() {
+    if (!currentMethodology) {
+        showNotification('No methodology data available for this query', 'info');
+        return;
+    }
+    
+    const card = document.createElement('div');
+    card.className = 'output-card methodology-card';
+    
+    let html = `
+        <div class="output-header">
+            <div class="output-title">
+                <i class="fas fa-flask"></i>
+                Methodology Explanation
+            </div>
+        </div>
+        <div class="output-body">
+    `;
+    
+    // Query understanding
+    if (currentMethodology.query_understanding) {
+        html += `
+            <div class="methodology-section">
+                <h4>Query Understanding</h4>
+                <p><strong>Intent:</strong> ${currentMethodology.query_understanding.intent}</p>
+                <p><strong>Operation:</strong> ${currentMethodology.query_understanding.operation}</p>
+            </div>
+        `;
+    }
+    
+    // Execution steps
+    if (currentMethodology.execution_steps && currentMethodology.execution_steps.length > 0) {
+        html += `
+            <div class="methodology-section">
+                <h4>Execution Steps</h4>
+                <ol class="methodology-steps">
+        `;
+        currentMethodology.execution_steps.forEach(step => {
+            html += `<li>${step}</li>`;
+        });
+        html += `</ol></div>`;
+    }
+    
+    // Calculations
+    if (currentMethodology.calculations && currentMethodology.calculations.length > 0) {
+        html += `
+            <div class="methodology-section">
+                <h4>Calculations Performed</h4>
+                <ul class="methodology-calculations">
+        `;
+        currentMethodology.calculations.forEach(calc => {
+            html += `<li><code>${calc}</code></li>`;
+        });
+        html += `</ul></div>`;
+    }
+    
+    // Data lineage
+    if (currentMethodology.data_lineage) {
+        html += `
+            <div class="methodology-section">
+                <h4>Data Lineage</h4>
+                <p><strong>Source:</strong> ${currentMethodology.data_lineage.source_rows} rows</p>
+                <p><strong>After Filtering:</strong> ${currentMethodology.data_lineage.filtered_rows} rows</p>
+                <p><strong>Final Result:</strong> ${currentMethodology.data_lineage.result_rows} rows</p>
+            </div>
+        `;
+    }
+    
+    // Statistical tests
+    if (currentMethodology.statistical_tests && currentMethodology.statistical_tests.length > 0) {
+        html += `
+            <div class="methodology-section">
+                <h4>Statistical Tests Applied</h4>
+                <ul class="methodology-tests">
+        `;
+        currentMethodology.statistical_tests.forEach(test => {
+            html += `<li>${test}</li>`;
+        });
+        html += `</ul></div>`;
+    }
+    
+    html += `</div>`;
+    card.innerHTML = html;
+    
+    workspaceContent.insertBefore(card, workspaceContent.firstChild);
+    workspaceContent.scrollTop = 0;
+}
+
+// ===== CONTEXT INDICATORS =====
+
+// Store conversation context
+let conversationContext = [];
+
+// Show context indicator
+function showContextIndicator(contextInfo) {
+    if (!contextInfo || !contextInfo.has_context) return;
+    
+    const indicator = document.createElement('div');
+    indicator.className = 'context-indicator';
+    indicator.innerHTML = `
+        <i class="fas fa-link"></i>
+        Using context from ${contextInfo.context_queries.length} previous ${contextInfo.context_queries.length === 1 ? 'query' : 'queries'}
+    `;
+    
+    // Insert before the latest message
+    const messages = chatMessages.querySelectorAll('.chat-message.assistant');
+    if (messages.length > 0) {
+        const lastMessage = messages[messages.length - 1];
+        lastMessage.insertBefore(indicator, lastMessage.firstChild);
+    }
+}
+
+// Update conversation context
+function updateConversationContext(query, response) {
+    conversationContext.push({
+        query: query,
+        timestamp: Date.now(),
+        response: response
+    });
+    
+    // Keep last 3 queries
+    if (conversationContext.length > 3) {
+        conversationContext = conversationContext.slice(-3);
+    }
+}
+
+// ===== STATISTICAL INSIGHTS DISPLAY =====
+
+// Show statistical insights
+function showStatisticalInsights(insights) {
+    if (!insights) return;
+    
+    const card = document.createElement('div');
+    card.className = 'output-card statistical-insights-card';
+    
+    let html = `
+        <div class="output-header">
+            <div class="output-title">
+                <i class="fas fa-chart-line"></i>
+                Statistical Analysis
+            </div>
+        </div>
+        <div class="output-body">
+    `;
+    
+    // Significance tests
+    if (insights.significance_tests && insights.significance_tests.length > 0) {
+        html += `<div class="stat-insight-section">
+            <h4>Significance Tests</h4>`;
+        
+        insights.significance_tests.forEach(test => {
+            const isSignificant = test.is_significant;
+            html += `
+                <div class="stat-test-item">
+                    <div class="stat-test-header">
+                        <span class="stat-test-name">${test.test_name}</span>
+                        <span class="significance-badge ${isSignificant ? 'significant' : 'not-significant'}">
+                            <i class="fas fa-${isSignificant ? 'check-circle' : 'times-circle'}"></i>
+                            ${isSignificant ? 'Significant' : 'Not Significant'}
+                        </span>
+                    </div>
+                    <div class="stat-test-details">
+                        <span>p-value: <strong>${test.p_value}</strong></span>
+                        ${test.confidence_interval ? `<span>CI: ${test.confidence_interval}</span>` : ''}
+                    </div>
+                    ${test.interpretation ? `<div class="stat-test-interpretation">${test.interpretation}</div>` : ''}
+                </div>
+            `;
+        });
+        html += `</div>`;
+    }
+    
+    // Sample adequacy warnings
+    if (insights.sample_adequacy_warnings && insights.sample_adequacy_warnings.length > 0) {
+        html += `<div class="stat-insight-section">
+            <h4>Sample Size Warnings</h4>`;
+        
+        insights.sample_adequacy_warnings.forEach(warning => {
+            html += `
+                <div class="stat-warning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    ${warning}
+                </div>
+            `;
+        });
+        html += `</div>`;
+    }
+    
+    // Effect size
+    if (insights.effect_size) {
+        html += `<div class="stat-insight-section">
+            <h4>Effect Size</h4>
+            <p><strong>${insights.effect_size.magnitude}:</strong> ${insights.effect_size.value}</p>
+            <p class="stat-interpretation">${insights.effect_size.interpretation}</p>
+        </div>`;
+    }
+    
+    html += `</div>`;
+    card.innerHTML = html;
+    
+    workspaceContent.insertBefore(card, workspaceContent.firstChild);
+}
+
+// ===== PROACTIVE SUGGESTIONS DISPLAY =====
+
+// Show proactive suggestions
+function showProactiveSuggestions(suggestions) {
+    if (!suggestions) return;
+    
+    // Show proactive alerts
+    if (suggestions.proactive_alerts && suggestions.proactive_alerts.length > 0) {
+        suggestions.proactive_alerts.forEach(alert => {
+            showNotification(alert, 'info');
+        });
+    }
+    
+    // Show related analyses as clickable suggestions
+    if (suggestions.related_analyses && suggestions.related_analyses.length > 0) {
+        const card = document.createElement('div');
+        card.className = 'output-card proactive-suggestions-card';
+        
+        let html = `
+            <div class="output-header">
+                <div class="output-title">
+                    <i class="fas fa-lightbulb"></i>
+                    Related Analyses
+                </div>
+            </div>
+            <div class="output-body">
+                <div class="related-analyses">
+        `;
+        
+        suggestions.related_analyses.forEach(analysis => {
+            html += `
+                <button class="related-analysis-btn" onclick="askFollowUp('${analysis.replace(/'/g, "\\'")}')">
+                    <i class="fas fa-arrow-right"></i>
+                    ${analysis}
+                </button>
+            `;
+        });
+        
+        html += `</div></div>`;
+        card.innerHTML = html;
+        
+        workspaceContent.insertBefore(card, workspaceContent.firstChild);
+    }
+}
+
+// Map generation features removed
+
+// ===== CHART TYPE SELECTOR =====
+
+// Show chart type selector with 5 major categories
+function showChartTypeSelector(data, query) {
+    if (!data || data.length === 0) return;
+    
+    const selectorDiv = document.createElement('div');
+    selectorDiv.className = 'chat-message assistant chart-selector';
+    selectorDiv.innerHTML = `
+        <div class="message-icon">
+            <i class="fas fa-chart-bar"></i>
+        </div>
+        <div class="message-content">
+            <div class="chart-selector-content">
+                <div class="chart-selector-header">
+                    <i class="fas fa-palette"></i>
+                    <span>I found <strong>${data.length} data points</strong>. Which visualization would you like?</span>
+                </div>
+                <div class="chart-type-grid">
+                    <button class="chart-type-option" onclick="generateSelectedChart(this, 'vertical_bar')" data-type="vertical_bar">
+                        <div class="chart-icon">
+                            <i class="fas fa-chart-bar"></i>
+                        </div>
+                        <div class="chart-label">Bar Chart</div>
+                        <div class="chart-desc">Compare values</div>
+                    </button>
+                    <button class="chart-type-option" onclick="generateSelectedChart(this, 'line')" data-type="line">
+                        <div class="chart-icon">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <div class="chart-label">Line Chart</div>
+                        <div class="chart-desc">Show trends</div>
+                    </button>
+                    <button class="chart-type-option" onclick="generateSelectedChart(this, 'donut')" data-type="donut">
+                        <div class="chart-icon">
+                            <i class="fas fa-chart-pie"></i>
+                        </div>
+                        <div class="chart-label">Pie Chart</div>
+                        <div class="chart-desc">Show distribution</div>
+                    </button>
+                    <button class="chart-type-option" onclick="generateSelectedChart(this, 'area')" data-type="area">
+                        <div class="chart-icon">
+                            <i class="fas fa-chart-area"></i>
+                        </div>
+                        <div class="chart-label">Area Chart</div>
+                        <div class="chart-desc">Volume over time</div>
+                    </button>
+                    <button class="chart-type-option" onclick="generateSelectedChart(this, 'horizontal_bar')" data-type="horizontal_bar">
+                        <div class="chart-icon">
+                            <i class="fas fa-bars"></i>
+                        </div>
+                        <div class="chart-label">Horizontal Bar</div>
+                        <div class="chart-desc">Long labels</div>
+                    </button>
+                </div>
+                <div class="chart-selector-actions">
+                    <button class="chart-selector-btn secondary" onclick="skipChartSelection(this)">
+                        <i class="fas fa-times"></i>
+                        Skip Visualization
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    chatMessages.appendChild(selectorDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    // Store data for later use
+    selectorDiv.dataset.chartData = JSON.stringify(data);
+    selectorDiv.dataset.query = query;
+    
+    return selectorDiv;
+}
+
+// Generate selected chart type
+function generateSelectedChart(button, chartType) {
+    const selectorDiv = button.closest('.chart-selector');
+    const data = JSON.parse(selectorDiv.dataset.chartData);
+    const query = selectorDiv.dataset.query;
+    
+    // Update UI to show selection
+    const content = selectorDiv.querySelector('.chart-selector-content');
+    content.innerHTML = `
+        <div class="chart-prompt-result generating">
+            <div class="spinner-small"></div>
+            <span>Generating ${button.querySelector('.chart-label').textContent}...</span>
+        </div>
+    `;
+    
+    // Generate chart after brief delay
+    setTimeout(() => {
+        renderEnhancedChart(data, chartType, {
+            title: query,
+            seriesName: 'Analysis'
+        });
+        
+        // Update to success state
+        content.innerHTML = `
+            <div class="chart-prompt-result success">
+                <i class="fas fa-check-circle"></i>
+                <span>${button.querySelector('.chart-label').textContent} generated successfully</span>
+            </div>
+        `;
+        
+        selectorDiv.classList.add('chart-prompt-completed');
+    }, 300);
+}
+
+// Skip chart selection
+function skipChartSelection(button) {
+    const selectorDiv = button.closest('.chart-selector');
+    selectorDiv.classList.add('chart-prompt-dismissed');
+    
+    const content = selectorDiv.querySelector('.chart-selector-content');
+    content.innerHTML = `
+        <div class="chart-prompt-result skipped">
+            <i class="fas fa-times-circle"></i>
+            <span>Visualization skipped</span>
+        </div>
+    `;
+}
+
+// Make functions globally available
+window.showChartTypeSelector = showChartTypeSelector;
+window.generateSelectedChart = generateSelectedChart;
+window.skipChartSelection = skipChartSelection;
 
 // Initialize
 checkConnection();

@@ -389,75 +389,142 @@ QUALITY STANDARDS
 ❌ NEVER give generic advice without data backing
 
 ════════════════════════════════════════════════════════════
-OUTPUT FORMAT — ADAPTIVE JSON STRUCTURE
+OUTPUT FORMAT — CONSISTENT JSON STRUCTURE
 ════════════════════════════════════════════════════════════
 Return ONLY valid JSON. No markdown, no extra text.
 
-FOR SIMPLE QUESTIONS (fact, count, average):
+ALWAYS use this consistent structure regardless of question type:
+
 {{{{
-  "direct_answer": "One clear sentence with the key number",
-  "key_stats": [
-    "Supporting fact 1 with specific number",
-    "Supporting fact 2 compared to benchmark",
-    "Supporting fact 3 if relevant"
+  "direct_answer": "One clear sentence answering the question",
+  "key_insights": [
+    "Insight 1 with specific data",
+    "Insight 2 with comparison to benchmark",
+    "Insight 3 with business context"
+  ],
+  "supporting_data": {{{{
+    "primary_metric": "Main number/percentage being discussed",
+    "comparison_to_benchmark": "How it compares to platform average",
+    "sample_size": "Number of transactions analyzed",
+    "percentage_of_total": "What % of total transactions this represents"
+  }}}},
+  "root_cause": "Why this pattern exists (if applicable)",
+  "business_impact": {{{{
+    "severity": "Critical|High|Medium|Low",
+    "affected_volume": "X% of transactions OR X transactions",
+    "financial_impact": "Estimated impact with numbers OR insufficient data"
+  }}}},
+  "recommendations": [
+    "Actionable recommendation 1",
+    "Actionable recommendation 2"
   ],
   "confidence": "High|Medium|Low",
-  "confidence_reason": "Why this confidence level"
-}}}}
-
-FOR COMPARISON QUESTIONS:
-{{{{
-  "direct_answer": "X is Y% higher/lower than Z",
-  "comparison_details": {{{{
-    "metric_a": "Value for first item",
-    "metric_b": "Value for second item",
-    "difference": "Absolute or percentage difference",
-    "significance": "Is this difference meaningful?"
-  }}}},
-  "root_cause": "Why this difference exists",
-  "recommendation": "What to do about it (if applicable)",
-  "confidence": "High|Medium|Low"
-}}}}
-
-FOR ANALYSIS/INSIGHT QUESTIONS:
-{{{{
-  "direct_answer": "Main finding in one sentence",
-  "key_insights": [
-    "Insight 1 with data",
-    "Insight 2 with comparison",
-    "Insight 3 with business impact"
-  ],
-  "pattern": "Describe the pattern observed",
-  "root_cause": "Why this pattern exists",
-  "business_impact": {{{{
-    "volume_affected": "X% of transactions OR insufficient data",
-    "financial_impact": "Specific consequence with numbers",
-    "urgency": "Critical|High|Medium|Low"
-  }}}},
-  "recommendation": {{{{
-    "action": "Specific solution",
-    "expected_improvement": "Conservative estimate OR insufficient data",
-    "implementation": "Quick Win|Medium Term|Strategic"
-  }}}},
-  "data_limitations": "What we cannot determine from this data",
+  "confidence_reason": "Why this confidence level based on data quality",
   "follow_up_questions": [
     "Relevant drill-down question 1",
     "Relevant drill-down question 2"
-  ],
-  "confidence": "High|Medium|Low",
-  "confidence_reason": "Data quality and sample size justification"
+  ]
 }}}}
 
-FOR WHY QUESTIONS:
+FIELD USAGE RULES:
+- direct_answer: ALWAYS required - one sentence with the key finding
+- key_insights: ALWAYS required - 2-4 bullet points with specific numbers
+- supporting_data: ALWAYS required - quantify the finding
+- root_cause: Optional - only for "why" questions or when pattern is clear
+- business_impact: Optional - only when impact can be quantified
+- recommendations: Optional - only when actionable steps are clear
+- confidence: ALWAYS required
+- confidence_reason: ALWAYS required
+- follow_up_questions: ALWAYS required - 2-3 relevant questions
+
+EXAMPLES:
+
+SIMPLE FACT QUESTION:
 {{{{
-  "direct_answer": "The main reason is X",
-  "contributing_factors": [
-    "Factor 1 with percentage contribution",
-    "Factor 2 with evidence",
-    "Factor 3 if applicable"
+  "direct_answer": "HDFC has the highest transaction volume with 37,485 transactions",
+  "key_insights": [
+    "HDFC accounts for 14.99% of all platform transactions",
+    "This is 2.3x higher than the platform average per bank",
+    "Peak transaction hours are 10 AM - 2 PM (42% of HDFC volume)"
   ],
-  "evidence": "Data points that support this explanation",
-  "confidence": "High|Medium|Low"
+  "supporting_data": {{{{
+    "primary_metric": "37,485 transactions",
+    "comparison_to_benchmark": "2.3x platform average",
+    "sample_size": "37,485 transactions",
+    "percentage_of_total": "14.99%"
+  }}}},
+  "confidence": "High",
+  "confidence_reason": "Large sample size (14.99% of total) with clear pattern",
+  "follow_up_questions": [
+    "What is HDFC's failure rate compared to other banks?",
+    "Which merchant categories are most popular with HDFC users?"
+  ]
+}}}}
+
+COMPARISON QUESTION:
+{{{{
+  "direct_answer": "Android has 2.1x higher failure rate than iOS (6.2% vs 2.9%)",
+  "key_insights": [
+    "Android failure rate is 6.2%, iOS is 2.9% (platform average: 4.95%)",
+    "Root cause: 34% of Android users on 3G vs 12% of iOS users",
+    "3G network failures account for 67% of the difference"
+  ],
+  "supporting_data": {{{{
+    "primary_metric": "6.2% Android vs 2.9% iOS",
+    "comparison_to_benchmark": "Android 25% above average, iOS 41% below",
+    "sample_size": "142,000 Android, 98,000 iOS transactions",
+    "percentage_of_total": "96% of all mobile transactions"
+  }}}},
+  "root_cause": "Android users more likely on slower 3G networks which have higher packet loss rates",
+  "business_impact": {{{{
+    "severity": "High",
+    "affected_volume": "56.8% of all transactions (Android users)",
+    "financial_impact": "Estimated 4,680 preventable failures per day"
+  }}}},
+  "recommendations": [
+    "Implement adaptive retry logic for 3G connections (exponential backoff)",
+    "Add network quality detection and warn users before transaction",
+    "Prioritize Android app optimization for low-bandwidth scenarios"
+  ],
+  "confidence": "High",
+  "confidence_reason": "Large sample sizes and clear correlation between network type and failure rate",
+  "follow_up_questions": [
+    "What is the failure rate breakdown by Android version?",
+    "Which banks have the highest Android failure rates?"
+  ]
+}}}}
+
+WHY QUESTION:
+{{{{
+  "direct_answer": "Weekend P2M failures are 1.8x higher because of reduced merchant gateway capacity",
+  "key_insights": [
+    "Weekend P2M failure rate is 8.9% vs 4.9% on weekdays",
+    "Merchant gateway capacity reduced by 30% on weekends (staffing)",
+    "Higher average transaction size on weekends (₹1,847 vs ₹1,234) triggers more fraud checks"
+  ],
+  "supporting_data": {{{{
+    "primary_metric": "8.9% weekend failure rate",
+    "comparison_to_benchmark": "80% higher than weekday rate",
+    "sample_size": "42,500 weekend P2M transactions",
+    "percentage_of_total": "17% of all transactions"
+  }}}},
+  "root_cause": "Three factors: (1) Reduced merchant gateway capacity, (2) Higher transaction values trigger fraud checks, (3) PSU banks reduce weekend settlement operations",
+  "business_impact": {{{{
+    "severity": "Medium",
+    "affected_volume": "17% of transactions",
+    "financial_impact": "Estimated ₹2.1M in failed transaction value per weekend"
+  }}}},
+  "recommendations": [
+    "Negotiate with merchant gateways for consistent weekend capacity",
+    "Adjust fraud check thresholds for weekend transactions",
+    "Provide users with estimated success rates before weekend transactions"
+  ],
+  "confidence": "High",
+  "confidence_reason": "Clear pattern across multiple weekends with consistent contributing factors",
+  "follow_up_questions": [
+    "Which merchant categories have the highest weekend failure rates?",
+    "What is the retry success rate for failed weekend transactions?"
+  ]
 }}}}
 
 ════════════════════════════════════════════════════════════
