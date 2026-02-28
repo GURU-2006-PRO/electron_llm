@@ -2276,3 +2276,172 @@ window.clearHistory = clearHistory;
 window.toggleBookmark = toggleBookmark;
 
 console.log('[GLOBAL] History functions exposed to window');
+
+
+// ============================================================================
+// API KEY MANAGEMENT
+// ============================================================================
+
+// Show API Key Modal
+function showApiKeyModal() {
+    const modal = document.getElementById('apiKeyModal');
+    modal.style.display = 'flex';
+    
+    // Load current keys from backend
+    loadCurrentApiKeys();
+}
+
+// Load current API keys from backend
+async function loadCurrentApiKeys() {
+    try {
+        const response = await axios.get(`${API_URL}/get-api-keys`);
+        
+        if (response.data.status === 'success') {
+            const keys = response.data.keys;
+            
+            // Populate input fields with current keys
+            document.getElementById('gemini3Key').value = keys.GEMINI_API_KEY_3_FLASH || '';
+            document.getElementById('gemini25_1Key').value = keys.GEMINI_API_KEY_2_5_FLASH_1 || '';
+            document.getElementById('gemini25_2Key').value = keys.GEMINI_API_KEY_2_5_FLASH_2 || '';
+            document.getElementById('groqKey').value = keys.GROQ_API_KEY || '';
+            
+            // Check status of each key
+            checkAllApiKeys();
+        }
+    } catch (error) {
+        console.error('Failed to load API keys:', error);
+        showNotification('Failed to load current API keys', 'error');
+    }
+}
+
+// Close API Key Modal
+function closeApiKeyModal() {
+    const modal = document.getElementById('apiKeyModal');
+    modal.style.display = 'none';
+}
+
+// Toggle key visibility
+function toggleKeyVisibility(inputId) {
+    const input = document.getElementById(inputId);
+    const button = input.nextElementSibling;
+    const icon = button.querySelector('i');
+    
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
+    } else {
+        input.type = 'password';
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
+    }
+}
+
+// Check all API keys
+async function checkAllApiKeys() {
+    const keys = {
+        gemini3: document.getElementById('gemini3Key').value,
+        gemini25_1: document.getElementById('gemini25_1Key').value,
+        gemini25_2: document.getElementById('gemini25_2Key').value,
+        groq: document.getElementById('groqKey').value
+    };
+    
+    // Check each key
+    if (keys.gemini3) checkApiKey('gemini3', keys.gemini3, 'gemini3Status');
+    if (keys.gemini25_1) checkApiKey('gemini25_1', keys.gemini25_1, 'gemini25_1Status');
+    if (keys.gemini25_2) checkApiKey('gemini25_2', keys.gemini25_2, 'gemini25_2Status');
+    if (keys.groq) checkApiKey('groq', keys.groq, 'groqStatus');
+}
+
+// Check single API key
+async function checkApiKey(keyType, apiKey, statusElementId) {
+    const statusElement = document.getElementById(statusElementId);
+    
+    if (!apiKey || apiKey.trim() === '') {
+        statusElement.innerHTML = '<i class="fas fa-minus-circle"></i> Not set';
+        statusElement.className = 'api-key-status invalid';
+        return;
+    }
+    
+    statusElement.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+    statusElement.className = 'api-key-status checking';
+    
+    try {
+        // Test the key by making a simple API call
+        const response = await axios.post(`${API_URL}/test-api-key`, {
+            key_type: keyType,
+            api_key: apiKey
+        });
+        
+        if (response.data.status === 'success' && response.data.valid) {
+            statusElement.innerHTML = '<i class="fas fa-check-circle"></i> Valid';
+            statusElement.className = 'api-key-status valid';
+        } else {
+            statusElement.innerHTML = '<i class="fas fa-times-circle"></i> Invalid';
+            statusElement.className = 'api-key-status invalid';
+        }
+    } catch (error) {
+        console.error('API key test failed:', error);
+        statusElement.innerHTML = '<i class="fas fa-exclamation-circle"></i> Error';
+        statusElement.className = 'api-key-status invalid';
+    }
+}
+
+// Save API keys
+async function saveApiKeys() {
+    const keys = {
+        GEMINI_API_KEY_3_FLASH: document.getElementById('gemini3Key').value,
+        GEMINI_API_KEY_2_5_FLASH_1: document.getElementById('gemini25_1Key').value,
+        GEMINI_API_KEY_2_5_FLASH_2: document.getElementById('gemini25_2Key').value,
+        GROQ_API_KEY: document.getElementById('groqKey').value
+    };
+    
+    // Validate at least one key is provided
+    if (!keys.GEMINI_API_KEY_3_FLASH && !keys.GEMINI_API_KEY_2_5_FLASH_1 && !keys.GEMINI_API_KEY_2_5_FLASH_2) {
+        showNotification('Please provide at least one Gemini API key', 'error');
+        return;
+    }
+    
+    try {
+        // Save to backend
+        const response = await axios.post(`${API_URL}/update-api-keys`, keys);
+        
+        if (response.data.status === 'success') {
+            // Save to localStorage as backup
+            Object.keys(keys).forEach(key => {
+                if (keys[key]) {
+                    localStorage.setItem(key, keys[key]);
+                }
+            });
+            
+            showNotification('API keys saved and tested successfully!', 'success');
+            closeApiKeyModal();
+            
+            // Reload to apply new keys
+            setTimeout(() => {
+                location.reload();
+            }, 1500);
+        } else {
+            showNotification('Failed to save API keys: ' + response.data.message, 'error');
+        }
+    } catch (error) {
+        console.error('Failed to save API keys:', error);
+        showNotification('Failed to save API keys. Check console for details.', 'error');
+    }
+}
+
+// Close modal when clicking outside
+window.addEventListener('click', (e) => {
+    const modal = document.getElementById('apiKeyModal');
+    if (e.target === modal) {
+        closeApiKeyModal();
+    }
+});
+
+// Make functions globally available
+window.showApiKeyModal = showApiKeyModal;
+window.closeApiKeyModal = closeApiKeyModal;
+window.toggleKeyVisibility = toggleKeyVisibility;
+window.saveApiKeys = saveApiKeys;
+
+console.log('[GLOBAL] API key management functions exposed');

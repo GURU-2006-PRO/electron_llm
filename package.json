@@ -23,25 +23,45 @@
     "appId": "com.insightx.analytics",
     "productName": "InsightX Analytics",
     "directories": {
-      "output": "dist"
+      "output": "release"
     },
     "files": [
-      "**/*",
+      "index_simple.html",
+      "renderer_simple.js",
+      "main.js",
+      "chart-enhancements.js",
+      "chart-system.js",
+      "styles/**/*",
+      "features/**/*",
+      "!backend/**/*",
+      "!node_modules/**/*",
       "!**/*.md",
-      "!.git",
-      "!dist"
+      "!.git"
+    ],
+    "extraResources": [
+      {
+        "from": "backend/dist/api_server.exe",
+        "to": "backend/api_server.exe"
+      },
+      {
+        "from": "backend/data",
+        "to": "backend/data"
+      },
+      {
+        "from": "backend/.env",
+        "to": "backend/.env"
+      }
     ],
     "win": {
-      "target": [
-        "nsis",
-        "portable"
-      ]
+      "target": "nsis"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico"
     },
     "mac": {
       "target": "dmg"

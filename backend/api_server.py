@@ -38,7 +38,7 @@ def make_json_serializable(obj):
 
 # Try to import Multi-LLM service
 try:
-    from multi_llm_service import MultiLLMService
+    from model_service import MultiLLMService
     llm_available = True
 except ImportError as e:
     print(f"[WARNING] Multi-LLM service not available: {e}")
@@ -46,7 +46,7 @@ except ImportError as e:
 
 # Import advanced prompts system
 try:
-    from advanced_prompts import (
+    from prompt_engine import (
         get_global_stats,
         build_insight_prompt,
         PANDAS_GENERATION_PROMPT,
@@ -62,7 +62,7 @@ except ImportError as e:
 try:
     from statistical_analysis import add_statistical_analysis
     from query_suggestions import QuerySuggestionEngine
-    from methodology_explainer import MethodologyExplainer
+    from method_explainer import MethodologyExplainer
     from proactive_insights import ProactiveInsightGenerator
     enhancements_available = True
     print("[OK] Enhancement modules loaded")
@@ -72,7 +72,7 @@ except ImportError as e:
 
 # Import TIER 1 features
 try:
-    from tier1_integration import Tier1FeatureManager
+    from feature_manager import Tier1FeatureManager
     tier1_available = True
 except ImportError as e:
     print(f"[WARNING] TIER 1 features not available: {e}")
@@ -1210,3 +1210,146 @@ if __name__ == '__main__':
     print("=" * 50)
     
     app.run(debug=debug, host=host, port=port, use_reloader=False)
+
+
+# ============================================================================
+# API KEY MANAGEMENT ENDPOINTS
+# ============================================================================
+
+@app.route('/get-api-keys', methods=['GET'])
+def get_api_keys():
+    """Get current API keys from .env file (masked for security)"""
+    try:
+        keys = {
+            'GEMINI_API_KEY_3_FLASH': os.getenv('GEMINI_API_KEY_3_FLASH', ''),
+            'GEMINI_API_KEY_2_5_FLASH_1': os.getenv('GEMINI_API_KEY_2_5_FLASH_1', ''),
+            'GEMINI_API_KEY_2_5_FLASH_2': os.getenv('GEMINI_API_KEY_2_5_FLASH_2', ''),
+            'GROQ_API_KEY': os.getenv('GROQ_API_KEY', '')
+        }
+        
+        # Mask keys for security (show first 8 and last 4 characters)
+        masked_keys = {}
+        for key, value in keys.items():
+            if value and len(value) > 12:
+                masked_keys[key] = value[:8] + '...' + value[-4:]
+            else:
+                masked_keys[key] = value
+        
+        return jsonify({
+            "status": "success",
+            "keys": keys,  # Full keys for editing
+            "masked_keys": masked_keys  # Masked for display
+        })
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to get API keys: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/test-api-key', methods=['POST'])
+def test_api_key():
+    """Test if an API key is valid"""
+    try:
+        data = request.json
+        key_type = data.get('key_type')
+        api_key = data.get('api_key')
+        
+        if not api_key:
+            return jsonify({"status": "error", "valid": False, "message": "No API key provided"})
+        
+        # Test Gemini keys
+        if key_type.startswith('gemini'):
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=api_key)
+                model = genai.GenerativeModel('gemini-pro')
+                # Try a simple test
+                response = model.generate_content("Say 'test'")
+                return jsonify({"status": "success", "valid": True, "message": "Key is valid"})
+            except Exception as e:
+                return jsonify({"status": "error", "valid": False, "message": str(e)})
+        
+        # Test Groq key
+        elif key_type == 'groq':
+            try:
+                from openai import OpenAI
+                client = OpenAI(
+                    api_key=api_key,
+                    base_url="https://api.groq.com/openai/v1"
+                )
+                # Try a simple test
+                response = client.chat.completions.create(
+                    model="llama3-8b-8192",
+                    messages=[{"role": "user", "content": "test"}],
+                    max_tokens=5
+                )
+                return jsonify({"status": "success", "valid": True, "message": "Key is valid"})
+            except Exception as e:
+                return jsonify({"status": "error", "valid": False, "message": str(e)})
+        
+        return jsonify({"status": "error", "valid": False, "message": "Unknown key type"})
+        
+    except Exception as e:
+        print(f"[ERROR] API key test failed: {e}")
+        return jsonify({"status": "error", "valid": False, "message": str(e)}), 500
+
+@app.route('/update-api-keys', methods=['POST'])
+def update_api_keys():
+    """Update API keys in .env file"""
+    try:
+        data = request.json
+        
+        # Path to .env file
+        env_path = os.path.join(os.path.dirname(__file__), '.env')
+        
+        # Read current .env file
+        env_lines = []
+        if os.path.exists(env_path):
+            with open(env_path, 'r') as f:
+                env_lines = f.readlines()
+        
+        # Update keys
+        keys_to_update = {
+            'GEMINI_API_KEY_3_FLASH': data.get('GEMINI_API_KEY_3_FLASH'),
+            'GEMINI_API_KEY_2_5_FLASH_1': data.get('GEMINI_API_KEY_2_5_FLASH_1'),
+            'GEMINI_API_KEY_2_5_FLASH_2': data.get('GEMINI_API_KEY_2_5_FLASH_2'),
+            'GROQ_API_KEY': data.get('GROQ_API_KEY')
+        }
+        
+        # Update or add keys
+        updated_lines = []
+        keys_found = set()
+        
+        for line in env_lines:
+            updated = False
+            for key, value in keys_to_update.items():
+                if line.startswith(f'{key}=') and value:
+                    updated_lines.append(f'{key}={value}\n')
+                    keys_found.add(key)
+                    updated = True
+                    break
+            if not updated:
+                updated_lines.append(line)
+        
+        # Add new keys that weren't found
+        for key, value in keys_to_update.items():
+            if key not in keys_found and value:
+                updated_lines.append(f'{key}={value}\n')
+        
+        # Write back to .env file
+        with open(env_path, 'w') as f:
+            f.writelines(updated_lines)
+        
+        # Update environment variables
+        for key, value in keys_to_update.items():
+            if value:
+                os.environ[key] = value
+        
+        return jsonify({
+            "status": "success",
+            "message": "API keys updated successfully. Please restart the backend to apply changes."
+        })
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to update API keys: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
