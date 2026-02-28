@@ -108,50 +108,88 @@ function confirmChartGeneration(button, chartType, query) {
 
 // Enhanced chart rendering
 function renderEnhancedChart(data, chartType, chartConfig) {
-    if (!data || data.length === 0) return;
+    console.log('[renderEnhancedChart] ========== START ==========');
+    console.log('[renderEnhancedChart] Data:', data);
+    console.log('[renderEnhancedChart] Chart type:', chartType);
+    console.log('[renderEnhancedChart] Config:', chartConfig);
     
-    const chartCard = document.createElement('div');
-    chartCard.className = 'output-card chart-card enhanced-chart';
-    const chartId = 'chart-' + Date.now();
+    if (!data || data.length === 0) {
+        console.error('[renderEnhancedChart] No data provided');
+        return;
+    }
     
-    chartCard.innerHTML = `
-        <div class="output-header">
-            <div class="output-title">
-                <i class="fas fa-chart-${chartType === 'donut' ? 'pie' : chartType === 'vertical_bar' ? 'bar' : 'line'}"></i>
-                ${chartConfig?.title || 'Data Visualization'}
+    try {
+        // Verify workspaceContent exists
+        if (typeof workspaceContent === 'undefined' || !workspaceContent) {
+            throw new Error('workspaceContent element not found');
+        }
+        console.log('[renderEnhancedChart] workspaceContent found');
+        
+        const chartCard = document.createElement('div');
+        chartCard.className = 'output-card chart-card enhanced-chart';
+        const chartId = 'chart-' + Date.now();
+        
+        chartCard.innerHTML = `
+            <div class="output-header">
+                <div class="output-title">
+                    <i class="fas fa-chart-${chartType === 'donut' ? 'pie' : chartType === 'vertical_bar' ? 'bar' : 'line'}"></i>
+                    ${chartConfig?.title || 'Data Visualization'}
+                </div>
+                <div class="chart-actions">
+                    <button class="chart-action-btn" onclick="downloadChart('${chartId}')" title="Download as PNG">
+                        <i class="fas fa-download"></i>
+                    </button>
+                    <button class="chart-action-btn" onclick="fullscreenChart('${chartId}')" title="Fullscreen">
+                        <i class="fas fa-expand"></i>
+                    </button>
+                </div>
             </div>
-            <div class="chart-actions">
-                <button class="chart-action-btn" onclick="downloadChart('${chartId}')" title="Download as PNG">
-                    <i class="fas fa-download"></i>
-                </button>
-                <button class="chart-action-btn" onclick="fullscreenChart('${chartId}')" title="Fullscreen">
-                    <i class="fas fa-expand"></i>
-                </button>
+            <div class="output-body">
+                <div id="${chartId}" class="echart-container enhanced"></div>
             </div>
-        </div>
-        <div class="output-body">
-            <div id="${chartId}" class="echart-container enhanced"></div>
-        </div>
-    `;
-    
-    workspaceContent.insertBefore(chartCard, workspaceContent.firstChild);
-    
-    // Initialize ECharts
-    const chartDom = document.getElementById(chartId);
-    const myChart = echarts.init(chartDom, 'dark');
-    
-    // Build chart options
-    const option = buildEnhancedChartOption(data, chartType, chartConfig);
-    myChart.setOption(option, true);
-    
-    // Make responsive
-    window.addEventListener('resize', () => myChart.resize());
-    
-    // Store for actions
-    window.chartRegistry = window.chartRegistry || {};
-    window.chartRegistry[chartId] = myChart;
-    
-    return chartId;
+        `;
+        
+        console.log('[renderEnhancedChart] Chart card created with ID:', chartId);
+        
+        workspaceContent.insertBefore(chartCard, workspaceContent.firstChild);
+        console.log('[renderEnhancedChart] Chart card inserted into DOM');
+        
+        // Initialize ECharts
+        const chartDom = document.getElementById(chartId);
+        if (!chartDom) {
+            throw new Error('Chart DOM element not found after insertion');
+        }
+        console.log('[renderEnhancedChart] Chart DOM element found');
+        
+        // Verify echarts is available
+        if (typeof echarts === 'undefined') {
+            throw new Error('ECharts library not loaded');
+        }
+        
+        const myChart = echarts.init(chartDom, 'dark');
+        console.log('[renderEnhancedChart] ECharts instance initialized');
+        
+        // Build chart options
+        const option = buildEnhancedChartOption(data, chartType, chartConfig);
+        console.log('[renderEnhancedChart] Chart options built:', option);
+        
+        myChart.setOption(option, true);
+        console.log('[renderEnhancedChart] Chart options set');
+        
+        // Make responsive
+        window.addEventListener('resize', () => myChart.resize());
+        
+        // Store for actions
+        window.chartRegistry = window.chartRegistry || {};
+        window.chartRegistry[chartId] = myChart;
+        
+        console.log('[renderEnhancedChart] ========== COMPLETE ==========');
+        return chartId;
+    } catch (error) {
+        console.error('[renderEnhancedChart] ERROR:', error);
+        console.error('[renderEnhancedChart] Stack:', error.stack);
+        throw error;
+    }
 }
 
 // Build enhanced chart options
@@ -188,7 +226,7 @@ function buildEnhancedChartOption(data, chartType, chartConfig) {
     } else if (chartType === 'line' || chartType === 'area') {
         return buildLineChartOption(data, chartType, chartConfig, baseOption, preset);
     } else if (chartType === 'donut' || chartType === 'pie') {
-        return buildPieChartOption(data, chartConfig, baseOption, preset);
+        return buildPieChartOption(data, chartType, chartConfig, baseOption, preset);
     }
     
     return baseOption;
@@ -239,7 +277,7 @@ function buildBarChartOption(data, chartType, chartConfig, baseOption, preset) {
             backgroundColor: 'rgba(50, 50, 50, 0.95)',
             borderColor: '#007acc',
             borderWidth: 1,
-            textStyle: { color: '#ffffff' },
+            textStyle: { color: '#ffffff', fontSize: 13 },
             axisPointer: {
                 type: 'shadow',
                 shadowStyle: { color: 'rgba(0, 122, 204, 0.1)' }
@@ -247,7 +285,8 @@ function buildBarChartOption(data, chartType, chartConfig, baseOption, preset) {
             formatter: function(params) {
                 const param = params[0];
                 const fullLabel = categories[param.dataIndex];
-                return `<strong>${fullLabel}</strong><br/>${param.seriesName}: ${param.value.toLocaleString()}`;
+                return `<strong>${fullLabel}</strong><br/>` +
+                       `${param.seriesName}: ${param.value.toLocaleString()}`;
             }
         },
         xAxis: chartType === 'horizontal_bar' ? {
@@ -357,7 +396,7 @@ function buildLineChartOption(data, chartType, chartConfig, baseOption, preset) 
             backgroundColor: 'rgba(50, 50, 50, 0.95)',
             borderColor: '#007acc',
             borderWidth: 1,
-            textStyle: { color: '#ffffff' },
+            textStyle: { color: '#ffffff', fontSize: 13 },
             axisPointer: {
                 type: 'line',
                 lineStyle: { color: '#007acc', width: 1, type: 'dashed' }
@@ -365,7 +404,8 @@ function buildLineChartOption(data, chartType, chartConfig, baseOption, preset) 
             formatter: function(params) {
                 const param = params[0];
                 const fullLabel = categories[param.dataIndex];
-                return `<strong>${fullLabel}</strong><br/>${param.seriesName}: ${param.value.toLocaleString()}`;
+                return `<strong>${fullLabel}</strong><br/>` +
+                       `${param.seriesName}: ${param.value.toLocaleString()}`;
             }
         },
         xAxis: {
@@ -408,18 +448,33 @@ function buildLineChartOption(data, chartType, chartConfig, baseOption, preset) 
     };
 }
 
-// Build pie chart
-function buildPieChartOption(data, chartConfig, baseOption, preset) {
-    const pieData = data.map((row, index) => ({
-        name: String(row[Object.keys(row)[0]]),
-        value: (() => {
-            for (let key in row) {
-                if (typeof row[key] === 'number') return row[key];
+// Build pie/donut chart
+function buildPieChartOption(data, chartType, chartConfig, baseOption, preset) {
+    const pieData = data.map((row, index) => {
+        // Get the first column as name (state, bank, category, etc.)
+        const name = String(row[Object.keys(row)[0]]);
+        
+        // Get the first numeric value
+        let value = 0;
+        for (let key in row) {
+            if (typeof row[key] === 'number') {
+                value = row[key];
+                break;
             }
-            return 0;
-        })(),
-        itemStyle: { color: preset.colors[index % preset.colors.length] }
-    }));
+        }
+        
+        return {
+            name: name,
+            value: value,
+            itemStyle: { color: preset.colors[index % preset.colors.length] }
+        };
+    });
+    
+    // Calculate total for percentage display
+    const total = pieData.reduce((sum, item) => sum + item.value, 0);
+    
+    // Determine radius based on chart type
+    const radius = chartType === 'donut' ? ['40%', '70%'] : ['0%', '70%'];
     
     return {
         ...baseOption,
@@ -433,23 +488,64 @@ function buildPieChartOption(data, chartConfig, baseOption, preset) {
             orient: 'vertical',
             left: 'left',
             top: 'middle',
-            textStyle: { color: '#858585', fontSize: 12 }
+            textStyle: { color: '#858585', fontSize: 11 },
+            formatter: function(name) {
+                // Find the data item
+                const item = pieData.find(d => d.name === name);
+                if (item) {
+                    const percentage = ((item.value / total) * 100).toFixed(1);
+                    // Truncate long names
+                    const displayName = name.length > 15 ? name.substring(0, 12) + '...' : name;
+                    return `${displayName} (${percentage}%)`;
+                }
+                return name;
+            }
+        },
+        tooltip: {
+            trigger: 'item',
+            backgroundColor: 'rgba(50, 50, 50, 0.95)',
+            borderColor: '#007acc',
+            borderWidth: 1,
+            textStyle: { color: '#ffffff', fontSize: 13 },
+            formatter: function(params) {
+                return `<strong>${params.name}</strong><br/>` +
+                       `Value: ${params.value.toLocaleString()}<br/>` +
+                       `Percentage: ${params.percent}%`;
+            }
         },
         series: [{
             name: chartConfig?.seriesName || 'Distribution',
             type: 'pie',
-            radius: preset.radius,
+            radius: radius,
             center: ['60%', '50%'],
             data: pieData,
             emphasis: {
                 itemStyle: {
                     shadowBlur: 10,
                     shadowColor: 'rgba(0, 0, 0, 0.5)'
+                },
+                label: {
+                    show: true,
+                    fontSize: 14,
+                    fontWeight: 'bold'
                 }
             },
             label: {
-                formatter: '{b}: {d}%',
-                color: '#cccccc'
+                formatter: function(params) {
+                    // Show name and percentage on the chart
+                    const name = params.name.length > 12 ? params.name.substring(0, 10) + '..' : params.name;
+                    return `${name}\n${params.percent}%`;
+                },
+                color: '#cccccc',
+                fontSize: 10,
+                lineHeight: 14
+            },
+            labelLine: {
+                lineStyle: {
+                    color: '#858585'
+                },
+                length: 15,
+                length2: 10
             }
         }]
     };

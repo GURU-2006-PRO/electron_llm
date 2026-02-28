@@ -12,8 +12,8 @@ import time
 import re
 
 class MultiLLMService:
-    def __init__(self, openrouter_key, gemini_key):
-        """Initialize both DeepSeek (via OpenRouter) and Gemini"""
+    def __init__(self, openrouter_key, gemini_key, gemini_key_fallback=None):
+        """Initialize both DeepSeek (via OpenRouter) and Gemini with fallback support"""
         
         # OpenRouter for DeepSeek
         self.openrouter_client = OpenAI(
@@ -21,9 +21,27 @@ class MultiLLMService:
             base_url="https://openrouter.ai/api/v1"
         )
         
-        # Gemini - Use Gemini 3 Flash (latest)
-        genai.configure(api_key=gemini_key)
-        self.gemini_model = genai.GenerativeModel('gemini-3-flash-preview')
+        # Gemini - Use Gemini 3 Flash (latest) with fallback support
+        self.gemini_key = gemini_key
+        self.gemini_key_fallback = gemini_key_fallback
+        self.current_gemini_key = gemini_key
+        
+        try:
+            genai.configure(api_key=self.current_gemini_key)
+            self.gemini_model = genai.GenerativeModel('gemini-3-flash-preview')
+            print(f"[OK] Gemini initialized with primary key")
+        except Exception as e:
+            print(f"[WARNING] Primary Gemini key failed: {e}")
+            if self.gemini_key_fallback:
+                print(f"[INFO] Trying fallback Gemini key...")
+                try:
+                    self.current_gemini_key = self.gemini_key_fallback
+                    genai.configure(api_key=self.current_gemini_key)
+                    self.gemini_model = genai.GenerativeModel('gemini-3-flash-preview')
+                    print(f"[OK] Gemini initialized with fallback key")
+                except Exception as e2:
+                    print(f"[ERROR] Fallback Gemini key also failed: {e2}")
+                    raise
         
         # Available models
         self.MODELS = {
@@ -205,7 +223,7 @@ class MultiLLMService:
             }
     
     def _query_gemini(self, query, context):
-        """Query Gemini 3 Flash Preview"""
+        """Query Gemini 3 Flash Preview with automatic fallback"""
         try:
             print(f"[INFO] Calling Gemini 3 Flash Preview API...")
             start_time = time.time()
@@ -224,7 +242,21 @@ Provide a well-structured response with:
 
 Format your response clearly with sections."""
 
-            response = self.gemini_model.generate_content(prompt)
+            try:
+                response = self.gemini_model.generate_content(prompt)
+            except Exception as e:
+                # Try fallback key if primary fails
+                if self.gemini_key_fallback and self.current_gemini_key != self.gemini_key_fallback:
+                    print(f"[WARNING] Primary Gemini key failed: {e}")
+                    print(f"[INFO] Switching to fallback Gemini key...")
+                    self.current_gemini_key = self.gemini_key_fallback
+                    genai.configure(api_key=self.current_gemini_key)
+                    self.gemini_model = genai.GenerativeModel('gemini-3-flash-preview')
+                    response = self.gemini_model.generate_content(prompt)
+                    print(f"[OK] Fallback key successful")
+                else:
+                    raise
+            
             elapsed = time.time() - start_time
             
             print(f"[OK] Gemini response received in {elapsed:.2f}s")

@@ -29,10 +29,8 @@ function createWindow() {
         mainWindow.show();
     });
 
-    // Open DevTools in development mode
-    if (process.argv.includes('--dev')) {
-        mainWindow.webContents.openDevTools();
-    }
+    // ALWAYS open DevTools for debugging
+    mainWindow.webContents.openDevTools();
 
     mainWindow.on('closed', () => {
         mainWindow = null;

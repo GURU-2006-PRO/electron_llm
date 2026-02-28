@@ -317,27 +317,42 @@ async function sendAdvancedQueryWithStreaming(query, model) {
             }
             
             // Show statistical insights if available (TIER 1)
-            if (response.data.statistical_insights) {
-                showStatisticalInsights(response.data.statistical_insights);
-            }
+            // DISABLED - causing display issues
+            // if (response.data.statistical_insights) {
+            //     showStatisticalInsights(response.data.statistical_insights);
+            // }
             
             // Show proactive suggestions if available (TIER 1)
-            if (response.data.proactive_suggestions) {
-                showProactiveSuggestions(response.data.proactive_suggestions);
-            }
+            // DISABLED - causing display issues
+            // if (response.data.proactive_suggestions) {
+            //     showProactiveSuggestions(response.data.proactive_suggestions);
+            // }
             
-            // Show data visualization if available
+            // Show data table FIRST if available
+            console.log('[DEBUG] ========== CHECKING FOR CHART DATA ==========');
+            console.log('[DEBUG] response.data:', response.data);
+            console.log('[DEBUG] response.data.data exists:', !!response.data.data);
+            console.log('[DEBUG] response.data.data:', response.data.data);
+            console.log('[DEBUG] data length:', response.data.data ? response.data.data.length : 0);
+            console.log('[DEBUG] data type:', typeof response.data.data);
+            
             if (response.data.data && response.data.data.length > 0) {
-                // Show inline chart generation prompt (Cursor IDE style)
-                const chartType = response.data.chart_type || 'vertical_bar';
-                showChartGenerationPrompt(
-                    response.data.data,
-                    chartType,
-                    query
-                );
+                console.log('[DEBUG] ✓ DATA FOUND! Showing data table and chart selector');
+                console.log('[DEBUG] Sample data:', response.data.data.slice(0, 2));
                 
-                // Always show data table
+                // STEP 1: Show data table FIRST
+                console.log('[DEBUG] Calling showDataTable...');
                 showDataTable(response.data.data);
+                console.log('[DEBUG] showDataTable completed');
+                
+                // STEP 2: THEN show chart type selector AFTER the table
+                console.log('[DEBUG] Calling showChartTypeSelector...');
+                showChartTypeSelector(response.data.data, query);
+                console.log('[DEBUG] showChartTypeSelector completed');
+                console.log('[DEBUG] ========== CHART SETUP COMPLETE ==========');
+            } else {
+                console.log('[DEBUG] ✗ NO DATA - Skipping charts');
+                console.log('[DEBUG] ========== NO CHART DATA ==========');
             }
             
         } else if (response.data.answer) {
@@ -497,24 +512,21 @@ async function sendAdvancedQuery(query, model) {
             }
             
             // Show statistical insights if available (TIER 1)
-            if (response.data.statistical_insights) {
-                showStatisticalInsights(response.data.statistical_insights);
-            }
+            // DISABLED - causing display issues
+            // if (response.data.statistical_insights) {
+            //     showStatisticalInsights(response.data.statistical_insights);
+            // }
             
             // Show proactive suggestions if available (TIER 1)
-            if (response.data.proactive_suggestions) {
-                showProactiveSuggestions(response.data.proactive_suggestions);
-            }
+            // DISABLED - causing display issues
+            // if (response.data.proactive_suggestions) {
+            //     showProactiveSuggestions(response.data.proactive_suggestions);
+            // }
             
             // Show data visualization if available
             if (response.data.data && response.data.data.length > 0) {
-                // Show inline chart generation prompt (Cursor IDE style)
-                const chartType = response.data.chart_type || 'vertical_bar';
-                showChartGenerationPrompt(
-                    response.data.data,
-                    chartType,
-                    query
-                );
+                // Show chart type selector with 5 major categories
+                showChartTypeSelector(response.data.data, query);
                 
                 // Always show data table
                 showDataTable(response.data.data);
@@ -539,12 +551,7 @@ async function sendAdvancedQuery(query, model) {
             
             // Check if there's data to visualize (even in simple mode)
             if (response.data.data && response.data.data.length > 0) {
-                const chartType = response.data.chart_type || 'vertical_bar';
-                showChartGenerationPrompt(
-                    response.data.data,
-                    chartType,
-                    query
-                );
+                showChartTypeSelector(response.data.data, query);
                 showDataTable(response.data.data);
             } else if (query.toLowerCase().includes('top') || 
                        query.toLowerCase().includes('show') ||
@@ -1775,10 +1782,12 @@ function showProactiveSuggestions(suggestions) {
         `;
         
         suggestions.related_analyses.forEach(analysis => {
+            // Ensure analysis is a string
+            const analysisText = typeof analysis === 'string' ? analysis : String(analysis);
             html += `
-                <button class="related-analysis-btn" onclick="askFollowUp('${analysis.replace(/'/g, "\\'")}')">
+                <button class="related-analysis-btn" onclick="askFollowUp('${analysisText.replace(/'/g, "\\'")}')">
                     <i class="fas fa-arrow-right"></i>
-                    ${analysis}
+                    ${analysisText}
                 </button>
             `;
         });
@@ -1794,9 +1803,19 @@ function showProactiveSuggestions(suggestions) {
 
 // ===== CHART TYPE SELECTOR =====
 
-// Show chart type selector with 5 major categories
+// Show chart type selector with 6 chart types
 function showChartTypeSelector(data, query) {
-    if (!data || data.length === 0) return;
+    console.log('[showChartTypeSelector] ========== START ==========');
+    console.log('[showChartTypeSelector] Data:', data);
+    console.log('[showChartTypeSelector] Data length:', data ? data.length : 0);
+    console.log('[showChartTypeSelector] Query:', query);
+    
+    if (!data || data.length === 0) {
+        console.error('[showChartTypeSelector] ERROR: No data provided!');
+        return;
+    }
+    
+    console.log('[showChartTypeSelector] Creating selector div...');
     
     const selectorDiv = document.createElement('div');
     selectorDiv.className = 'chat-message assistant chart-selector';
@@ -1825,12 +1844,19 @@ function showChartTypeSelector(data, query) {
                         <div class="chart-label">Line Chart</div>
                         <div class="chart-desc">Show trends</div>
                     </button>
-                    <button class="chart-type-option" onclick="generateSelectedChart(this, 'donut')" data-type="donut">
+                    <button class="chart-type-option" onclick="generateSelectedChart(this, 'pie')" data-type="pie">
                         <div class="chart-icon">
                             <i class="fas fa-chart-pie"></i>
                         </div>
                         <div class="chart-label">Pie Chart</div>
-                        <div class="chart-desc">Show distribution</div>
+                        <div class="chart-desc">Full circle</div>
+                    </button>
+                    <button class="chart-type-option" onclick="generateSelectedChart(this, 'donut')" data-type="donut">
+                        <div class="chart-icon">
+                            <i class="fas fa-circle-notch"></i>
+                        </div>
+                        <div class="chart-label">Donut Chart</div>
+                        <div class="chart-desc">Ring style</div>
                     </button>
                     <button class="chart-type-option" onclick="generateSelectedChart(this, 'area')" data-type="area">
                         <div class="chart-icon">
@@ -1857,48 +1883,106 @@ function showChartTypeSelector(data, query) {
         </div>
     `;
     
+    console.log('[showChartTypeSelector] Appending to chatMessages...');
+    console.log('[showChartTypeSelector] chatMessages element:', chatMessages);
+    
     chatMessages.appendChild(selectorDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    console.log('[showChartTypeSelector] Selector appended successfully');
     
     // Store data for later use
     selectorDiv.dataset.chartData = JSON.stringify(data);
     selectorDiv.dataset.query = query;
+    
+    console.log('[showChartTypeSelector] Data stored in dataset');
+    console.log('[showChartTypeSelector] ========== COMPLETE ==========');
     
     return selectorDiv;
 }
 
 // Generate selected chart type
 function generateSelectedChart(button, chartType) {
-    const selectorDiv = button.closest('.chart-selector');
-    const data = JSON.parse(selectorDiv.dataset.chartData);
-    const query = selectorDiv.dataset.query;
+    console.log('[CHART] ========== CHART GENERATION START ==========');
+    console.log('[CHART] Chart type requested:', chartType);
+    console.log('[CHART] Button element:', button);
     
-    // Update UI to show selection
-    const content = selectorDiv.querySelector('.chart-selector-content');
-    content.innerHTML = `
-        <div class="chart-prompt-result generating">
-            <div class="spinner-small"></div>
-            <span>Generating ${button.querySelector('.chart-label').textContent}...</span>
-        </div>
-    `;
-    
-    // Generate chart after brief delay
-    setTimeout(() => {
-        renderEnhancedChart(data, chartType, {
-            title: query,
-            seriesName: 'Analysis'
-        });
+    try {
+        const selectorDiv = button.closest('.chart-selector');
+        if (!selectorDiv) {
+            throw new Error('Could not find chart-selector parent element');
+        }
         
-        // Update to success state
+        const data = JSON.parse(selectorDiv.dataset.chartData);
+        const query = selectorDiv.dataset.query;
+        
+        console.log('[CHART] Data points:', data.length);
+        console.log('[CHART] Query:', query);
+        console.log('[CHART] Sample data:', data.slice(0, 2));
+        
+        // Update UI to show selection
+        const content = selectorDiv.querySelector('.chart-selector-content');
+        if (!content) {
+            throw new Error('Could not find chart-selector-content element');
+        }
+        
         content.innerHTML = `
-            <div class="chart-prompt-result success">
-                <i class="fas fa-check-circle"></i>
-                <span>${button.querySelector('.chart-label').textContent} generated successfully</span>
+            <div class="chart-prompt-result generating">
+                <div class="spinner-small"></div>
+                <span>Generating ${button.querySelector('.chart-label').textContent}...</span>
             </div>
         `;
         
-        selectorDiv.classList.add('chart-prompt-completed');
-    }, 300);
+        // Verify ECharts is available
+        if (typeof echarts === 'undefined') {
+            throw new Error('ECharts library is not loaded');
+        }
+        console.log('[CHART] ECharts available, version:', echarts.version);
+        
+        // Verify renderEnhancedChart function exists
+        if (typeof renderEnhancedChart !== 'function') {
+            throw new Error('renderEnhancedChart function is not defined');
+        }
+        console.log('[CHART] renderEnhancedChart function is available');
+        
+        // Generate chart after brief delay
+        setTimeout(() => {
+            try {
+                console.log('[CHART] Calling renderEnhancedChart...');
+                
+                const chartId = renderEnhancedChart(data, chartType, {
+                    title: query,
+                    seriesName: 'Analysis'
+                });
+                
+                console.log('[CHART] Chart rendered successfully with ID:', chartId);
+                
+                // Update to success state
+                content.innerHTML = `
+                    <div class="chart-prompt-result success">
+                        <i class="fas fa-check-circle"></i>
+                        <span>${button.querySelector('.chart-label').textContent} generated successfully</span>
+                    </div>
+                `;
+                
+                selectorDiv.classList.add('chart-prompt-completed');
+                console.log('[CHART] ========== CHART GENERATION COMPLETE ==========');
+            } catch (error) {
+                console.error('[CHART] Error in setTimeout callback:', error);
+                console.error('[CHART] Stack trace:', error.stack);
+                content.innerHTML = `
+                    <div class="chart-prompt-result error">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <span>Error: ${error.message}</span>
+                    </div>
+                `;
+            }
+        }, 300);
+    } catch (error) {
+        console.error('[CHART] Error in generateSelectedChart:', error);
+        console.error('[CHART] Stack trace:', error.stack);
+        alert('Chart generation failed: ' + error.message + '\n\nCheck browser console (F12) for details.');
+    }
 }
 
 // Skip chart selection
@@ -1919,6 +2003,21 @@ function skipChartSelection(button) {
 window.showChartTypeSelector = showChartTypeSelector;
 window.generateSelectedChart = generateSelectedChart;
 window.skipChartSelection = skipChartSelection;
+
+// Verify chart system is ready
+console.log('[CHART SYSTEM] Verifying chart functionality...');
+console.log('[CHART SYSTEM] ECharts available:', typeof echarts !== 'undefined');
+console.log('[CHART SYSTEM] renderEnhancedChart available:', typeof renderEnhancedChart !== 'undefined');
+console.log('[CHART SYSTEM] showChartTypeSelector available:', typeof showChartTypeSelector !== 'undefined');
+console.log('[CHART SYSTEM] generateSelectedChart available:', typeof generateSelectedChart !== 'undefined');
+console.log('[CHART SYSTEM] skipChartSelection available:', typeof skipChartSelection !== 'undefined');
+
+if (typeof echarts === 'undefined') {
+    console.error('[CHART SYSTEM] CRITICAL: ECharts not loaded!');
+}
+if (typeof renderEnhancedChart === 'undefined') {
+    console.error('[CHART SYSTEM] CRITICAL: renderEnhancedChart not defined!');
+}
 
 // Initialize
 checkConnection();

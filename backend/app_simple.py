@@ -100,21 +100,36 @@ if llm_available:
     try:
         # Get API keys from environment variables
         OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
-        GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+        GEMINI_3_FLASH_KEY = os.getenv('GEMINI_API_KEY_3_FLASH')
+        GEMINI_2_5_FLASH_1_KEY = os.getenv('GEMINI_API_KEY_2_5_FLASH_1')
+        GEMINI_2_5_FLASH_2_KEY = os.getenv('GEMINI_API_KEY_2_5_FLASH_2')
         
         if not OPENROUTER_API_KEY or OPENROUTER_API_KEY == 'your-openrouter-key-here':
             print("[WARNING] OPENROUTER_API_KEY not set in .env file")
         
-        if not GEMINI_API_KEY or GEMINI_API_KEY == 'your-gemini-key-here':
-            print("[WARNING] GEMINI_API_KEY not set in .env file")
+        if not GEMINI_3_FLASH_KEY:
+            print("[WARNING] GEMINI_API_KEY_3_FLASH not set in .env file")
+        
+        if GEMINI_2_5_FLASH_1_KEY and GEMINI_2_5_FLASH_2_KEY:
+            print("[INFO] All 3 Gemini keys configured")
+        
+        # Initialize Gemini Manager
+        from gemini_config import GeminiManager
+        gemini_manager = GeminiManager(
+            key_3_flash=GEMINI_3_FLASH_KEY,
+            key_2_5_flash_1=GEMINI_2_5_FLASH_1_KEY,
+            key_2_5_flash_2=GEMINI_2_5_FLASH_2_KEY
+        )
         
         llm_service = MultiLLMService(
             openrouter_key=OPENROUTER_API_KEY,
-            gemini_key=GEMINI_API_KEY
+            gemini_key=GEMINI_3_FLASH_KEY,
+            gemini_key_fallback=GEMINI_2_5_FLASH_1_KEY
         )
     except Exception as e:
         print(f"[WARNING] Could not initialize Multi-LLM service: {e}")
         llm_service = None
+        gemini_manager = None
 
 # Global stats cache
 global_stats = None
@@ -207,6 +222,20 @@ def health_check():
         "dataset_loaded": dataset_loaded,
         "rows": len(df) if dataset_loaded else 0
     })
+
+@app.route('/gemini-models', methods=['GET'])
+def get_gemini_models():
+    """Get available Gemini models for frontend selection"""
+    if gemini_manager:
+        return jsonify({
+            "status": "success",
+            "models": gemini_manager.get_available_models()
+        })
+    else:
+        return jsonify({
+            "status": "error",
+            "error": "Gemini manager not initialized"
+        }), 500
 
 @app.route('/columns', methods=['GET'])
 def get_columns():
@@ -491,9 +520,23 @@ Column Types:
 {result_df.dtypes.to_string()}
 """
         
-        # Use Gemini directly if selected, otherwise use OpenRouter
-        if insight_model == 'gemini-flash':
-            print("[INFO] Using Gemini API directly")
+        # Use Gemini models if selected
+        if insight_model.startswith('gemini'):
+            print(f"[INFO] Using Gemini API: {insight_model}")
+            
+            # Get the appropriate Gemini model
+            if gemini_manager:
+                try:
+                    gemini_model, model_display_name = gemini_manager.get_model(insight_model)
+                    print(f"[INFO] Using {model_display_name}")
+                except Exception as e:
+                    print(f"[WARNING] Failed to get Gemini model {insight_model}: {e}")
+                    # Fallback to default
+                    gemini_model = llm_service.gemini_model
+                    model_display_name = "Gemini (default)"
+            else:
+                gemini_model = llm_service.gemini_model
+                model_display_name = "Gemini (default)"
             
             # Use Gemini API
             prompt = f"""{insight_system_prompt}
@@ -509,14 +552,23 @@ Now analyze this result and generate the structured insight JSON.
 Return ONLY valid JSON, no markdown, no extra text."""
             
             try:
-                gemini_response = llm_service.gemini_model.generate_content(prompt)
+                gemini_response = gemini_model.generate_content(prompt)
                 raw_insight = gemini_response.text
             except Exception as e:
+                error_str = str(e)
                 print(f"[ERROR] Gemini API failed: {e}")
-                return jsonify({
-                    "status": "error",
-                    "error": f"Gemini API error: {str(e)}"
-                })
+                
+                # If quota error, suggest switching models
+                if '429' in error_str or 'quota' in error_str.lower():
+                    return jsonify({
+                        "status": "error",
+                        "error": f"Gemini API quota exceeded for {model_display_name}. Try switching to another Gemini model from the dropdown."
+                    })
+                else:
+                    return jsonify({
+                        "status": "error",
+                        "error": f"Gemini API error: {error_str}"
+                    })
         else:
             # Use OpenRouter for DeepSeek models
             if insight_model == 'deepseek-r1':
@@ -623,6 +675,11 @@ Return ONLY valid JSON, no markdown, no extra text."""}
             "methodology": make_json_serializable(methodology),
             "proactive_suggestions": make_json_serializable(proactive_suggestions)
         }
+        
+        # Log data being sent for debugging
+        print(f"[DEBUG] Sending response with {len(result_df)} data rows")
+        print(f"[DEBUG] Chart type: {query_spec.get('chart_type', 'vertical_bar')}")
+        print(f"[DEBUG] First data row: {result_df.to_dict('records')[0] if len(result_df) > 0 else 'No data'}")
         
         return jsonify(response_data)
         
@@ -1101,13 +1158,17 @@ def get_anomalies():
     
     try:
         anomalies = tier1_manager.get_anomalies()
+        # Convert to JSON-serializable format
+        anomalies_serializable = make_json_serializable(anomalies)
         return jsonify({
             "status": "success",
-            "anomalies": anomalies,
+            "anomalies": anomalies_serializable,
             "count": len(anomalies)
         })
     except Exception as e:
         print(f"[ERROR] Get anomalies failed: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"status": "error", "error": str(e)})
 
 @app.route('/expand-query', methods=['POST'])

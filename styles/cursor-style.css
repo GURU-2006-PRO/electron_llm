@@ -4152,7 +4152,7 @@ body.light-theme .related-analysis-btn:hover {
 
 .chart-type-grid {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 12px;
     margin-bottom: 16px;
 }

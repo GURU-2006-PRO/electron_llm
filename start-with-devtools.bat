@@ -1,0 +1,3 @@
+@echo off
+echo Starting InsightX with DevTools...
+npm start
