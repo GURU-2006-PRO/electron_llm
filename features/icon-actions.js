@@ -27,97 +27,264 @@ class IconActions {
     }
 
     async exportResults() {
-        const results = document.querySelectorAll('.output-card');
-        if (results.length === 0) {
-            this.showNotification('No results to export', 'warning');
+        // Check if there's data to export
+        const dataTable = document.querySelector('.data-table');
+        if (!dataTable) {
+            this.showNotification('No data to export. Ask a question first!', 'warning');
             return;
         }
 
-        // Create export data
-        const exportData = [];
-        results.forEach(card => {
-            const title = card.querySelector('.output-title')?.textContent;
-            const body = card.querySelector('.output-body')?.textContent;
-            exportData.push({ title, content: body });
+        // Extract table data
+        const headers = [];
+        const rows = [];
+        
+        // Get headers
+        dataTable.querySelectorAll('thead th').forEach(th => {
+            headers.push(th.textContent.trim());
+        });
+        
+        // Get rows
+        dataTable.querySelectorAll('tbody tr').forEach(tr => {
+            const row = [];
+            tr.querySelectorAll('td').forEach(td => {
+                row.push(td.textContent.trim());
+            });
+            rows.push(row);
         });
 
-        // Download as JSON
-        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        // Create CSV content
+        let csvContent = headers.join(',') + '\n';
+        rows.forEach(row => {
+            // Escape commas and quotes in data
+            const escapedRow = row.map(cell => {
+                if (cell.includes(',') || cell.includes('"') || cell.includes('\n')) {
+                    return `"${cell.replace(/"/g, '""')}"`;
+                }
+                return cell;
+            });
+            csvContent += escapedRow.join(',') + '\n';
+        });
+
+        // Download CSV
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `insightx-results-${Date.now()}.json`;
+        a.download = `insightx-data-${new Date().toISOString().split('T')[0]}.csv`;
         a.click();
         URL.revokeObjectURL(url);
 
-        this.showNotification('Results exported successfully', 'success');
+        this.showNotification(`Exported ${rows.length} rows to CSV`, 'success');
     }
 
     async generateReport() {
-        this.showNotification('Generating PDF report...', 'info');
+        this.showNotification('Generating report...', 'info');
         
-        // Collect all results
-        const results = document.querySelectorAll('.output-card');
-        const reportData = {
-            title: 'InsightX Analytics Report',
-            date: new Date().toLocaleDateString(),
-            results: []
-        };
-
-        results.forEach(card => {
-            const title = card.querySelector('.output-title')?.textContent;
-            const stats = {};
-            card.querySelectorAll('.stat-item').forEach(item => {
-                const label = item.querySelector('.stat-label')?.textContent;
-                const value = item.querySelector('.stat-value')?.textContent;
-                if (label && value) stats[label] = value;
-            });
-            reportData.results.push({ title, statistics: stats });
+        // Collect all insights from chat
+        const insights = [];
+        document.querySelectorAll('.chat-message.assistant').forEach(msg => {
+            const text = msg.querySelector('.message-text')?.innerHTML;
+            if (text && !text.includes('Dataset loaded') && !text.includes('Ask me')) {
+                insights.push(text);
+            }
         });
 
-        // Create simple HTML report
-        const html = this.generateReportHTML(reportData);
-        const blob = new Blob([html], { type: 'text/html' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `insightx-report-${Date.now()}.html`;
-        a.click();
-        URL.revokeObjectURL(url);
+        // Get data table if exists
+        let dataTableHTML = '';
+        const dataTable = document.querySelector('.data-table');
+        if (dataTable) {
+            dataTableHTML = `
+                <div class="section">
+                    <h2>📊 Data Results</h2>
+                    ${dataTable.outerHTML}
+                </div>
+            `;
+        }
 
-        this.showNotification('Report generated successfully', 'success');
-    }
+        // Get charts if exist
+        let chartsHTML = '';
+        const charts = document.querySelectorAll('.chart-card');
+        if (charts.length > 0) {
+            chartsHTML = '<div class="section"><h2>📈 Visualizations</h2>';
+            charts.forEach((chart, index) => {
+                const title = chart.querySelector('.output-title')?.textContent || `Chart ${index + 1}`;
+                const chartId = chart.querySelector('.echart-container')?.id;
+                
+                if (chartId && window.chartRegistry && window.chartRegistry[chartId]) {
+                    // Get chart as base64 image
+                    const chartInstance = window.chartRegistry[chartId];
+                    const imageData = chartInstance.getDataURL({
+                        type: 'png',
+                        pixelRatio: 2,
+                        backgroundColor: '#ffffff'
+                    });
+                    chartsHTML += `
+                        <div class="chart-section">
+                            <h3>${title}</h3>
+                            <img src="${imageData}" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px;">
+                        </div>
+                    `;
+                }
+            });
+            chartsHTML += '</div>';
+        }
 
-    generateReportHTML(data) {
-        return `
+        // Create comprehensive HTML report
+        const html = `
 <!DOCTYPE html>
 <html>
 <head>
-    <title>${data.title}</title>
+    <meta charset="UTF-8">
+    <title>InsightX Analytics Report</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 40px; }
-        h1 { color: #333; }
-        .result { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
-        .stat { display: flex; justify-content: space-between; padding: 8px 0; }
-        .label { font-weight: bold; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+        }
+        .header {
+            border-bottom: 3px solid #007acc;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #007acc;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        .header .meta {
+            color: #666;
+            font-size: 14px;
+        }
+        .section {
+            margin: 30px 0;
+            padding: 20px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .section:last-child {
+            border-bottom: none;
+        }
+        .section h2 {
+            color: #333;
+            font-size: 24px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .section h3 {
+            color: #555;
+            font-size: 18px;
+            margin: 20px 0 10px 0;
+        }
+        .insight-box {
+            background: #f8f9fa;
+            border-left: 4px solid #007acc;
+            padding: 15px 20px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        .insight-box ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .insight-box li {
+            margin: 5px 0;
+        }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-size: 14px;
+        }
+        .data-table th {
+            background: #007acc;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        .data-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #eee;
+        }
+        .data-table tr:hover {
+            background: #f8f9fa;
+        }
+        .chart-section {
+            margin: 20px 0;
+            page-break-inside: avoid;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid #eee;
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+        }
+        @media print {
+            body { background: white; padding: 0; }
+            .container { box-shadow: none; }
+            .section { page-break-inside: avoid; }
+        }
     </style>
 </head>
 <body>
-    <h1>${data.title}</h1>
-    <p>Generated: ${data.date}</p>
-    ${data.results.map(r => `
-        <div class="result">
-            <h2>${r.title}</h2>
-            ${Object.entries(r.statistics).map(([k, v]) => `
-                <div class="stat">
-                    <span class="label">${k}:</span>
-                    <span>${v}</span>
+    <div class="container">
+        <div class="header">
+            <h1>📊 InsightX Analytics Report</h1>
+            <div class="meta">
+                Generated: ${new Date().toLocaleString()}<br>
+                Dataset: UPI Transactions 2024 (250,000 records)
+            </div>
+        </div>
+
+        ${insights.length > 0 ? `
+        <div class="section">
+            <h2>💡 Key Insights</h2>
+            ${insights.map((insight, i) => `
+                <div class="insight-box">
+                    <strong>Analysis ${i + 1}:</strong>
+                    ${insight}
                 </div>
             `).join('')}
         </div>
-    `).join('')}
+        ` : ''}
+
+        ${chartsHTML}
+        
+        ${dataTableHTML}
+
+        <div class="footer">
+            <p><strong>InsightX Analytics</strong> - AI-Powered Data Analysis Platform</p>
+            <p>This report was automatically generated from your analysis session.</p>
+        </div>
+    </div>
 </body>
 </html>`;
+
+        // Download HTML report
+        const blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `insightx-report-${new Date().toISOString().split('T')[0]}.html`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        this.showNotification('Report generated successfully! Open in browser to print as PDF.', 'success');
     }
 
     showSearch() {

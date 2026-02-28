@@ -243,24 +243,41 @@ function buildBarChartOption(data, chartType, chartConfig, baseOption, preset) {
     });
     
     // Helper function to truncate long labels
-    const truncateLabel = (label, maxLength = 12) => {
+    const truncateLabel = (label, maxLength = 15) => {
         if (label.length <= maxLength) return label;
         return label.substring(0, maxLength - 3) + '...';
     };
     
     // Determine if labels need rotation based on length and count
-    const hasLongLabels = categories.some(cat => cat.length > 12);
-    const hasManyCategories = categories.length > 6;
-    const shouldRotate = hasLongLabels || hasManyCategories;
-    const rotationAngle = hasLongLabels ? 45 : (hasManyCategories ? 30 : 0);
+    const maxLabelLength = Math.max(...categories.map(cat => cat.length));
+    const hasLongLabels = maxLabelLength > 10;
+    const hasManyCategories = categories.length > 8;
     
-    // Adjust grid to accommodate rotated labels
-    const gridBottom = shouldRotate ? '15%' : '10%';
+    // Smart rotation: only rotate if really needed
+    let rotationAngle = 0;
+    let gridBottom = '10%';
+    let labelMaxLength = 15;
+    
+    if (chartType === 'vertical_bar') {
+        if (hasLongLabels && hasManyCategories) {
+            rotationAngle = 45;
+            gridBottom = '20%';
+            labelMaxLength = 20;
+        } else if (hasLongLabels) {
+            rotationAngle = 30;
+            gridBottom = '15%';
+            labelMaxLength = 18;
+        } else if (hasManyCategories) {
+            rotationAngle = 0;
+            gridBottom = '12%';
+            labelMaxLength = 12;
+        }
+    }
     
     return {
         ...baseOption,
         grid: {
-            left: '3%',
+            left: chartType === 'horizontal_bar' ? '15%' : '3%',
             right: '4%',
             bottom: gridBottom,
             top: '12%',
@@ -293,7 +310,8 @@ function buildBarChartOption(data, chartType, chartConfig, baseOption, preset) {
             type: 'value',
             axisLabel: { 
                 color: '#858585',
-                formatter: (value) => value.toLocaleString()
+                formatter: (value) => value.toLocaleString(),
+                fontSize: 11
             },
             splitLine: { lineStyle: { color: '#3e3e42' } }
         } : {
@@ -303,8 +321,9 @@ function buildBarChartOption(data, chartType, chartConfig, baseOption, preset) {
                 color: '#858585', 
                 rotate: rotationAngle,
                 interval: 0,
-                formatter: (value) => truncateLabel(value, 12),
-                fontSize: 10
+                formatter: (value) => truncateLabel(value, labelMaxLength),
+                fontSize: 11,
+                margin: 10
             },
             axisLine: { lineStyle: { color: '#3e3e42' } },
             axisTick: { alignWithLabel: true }
@@ -314,13 +333,16 @@ function buildBarChartOption(data, chartType, chartConfig, baseOption, preset) {
             data: categories,
             axisLabel: { 
                 color: '#858585',
-                formatter: (value) => truncateLabel(value, 20)
-            }
+                formatter: (value) => truncateLabel(value, 25),
+                fontSize: 11
+            },
+            axisLine: { lineStyle: { color: '#3e3e42' } }
         } : {
             type: 'value',
             axisLabel: { 
                 color: '#858585',
-                formatter: (value) => value.toLocaleString()
+                formatter: (value) => value.toLocaleString(),
+                fontSize: 11
             },
             splitLine: { lineStyle: { color: '#3e3e42' } }
         },
@@ -334,7 +356,7 @@ function buildBarChartOption(data, chartType, chartConfig, baseOption, preset) {
                     { offset: 0, color: preset.colors[0] },
                     { offset: 1, color: preset.colors[1] }
                 ]),
-                borderRadius: [4, 4, 0, 0]
+                borderRadius: chartType === 'horizontal_bar' ? [0, 4, 4, 0] : [4, 4, 0, 0]
             },
             label: {
                 show: values.length <= 15,
@@ -450,18 +472,46 @@ function buildLineChartOption(data, chartType, chartConfig, baseOption, preset) 
 
 // Build pie/donut chart
 function buildPieChartOption(data, chartType, chartConfig, baseOption, preset) {
+    console.log('[PIE CHART] Input data:', data);
+    
     const pieData = data.map((row, index) => {
-        // Get the first column as name (state, bank, category, etc.)
-        const name = String(row[Object.keys(row)[0]]);
+        console.log('[PIE CHART] Processing row:', row);
         
-        // Get the first numeric value
+        // Find the name column (first non-numeric column or first column)
+        let name = '';
         let value = 0;
-        for (let key in row) {
-            if (typeof row[key] === 'number') {
-                value = row[key];
+        
+        const keys = Object.keys(row);
+        
+        // Strategy 1: Find first string column for name
+        for (let key of keys) {
+            if (typeof row[key] === 'string' && row[key].length > 0) {
+                name = row[key];
                 break;
             }
         }
+        
+        // Strategy 2: If no string found, use first column
+        if (!name && keys.length > 0) {
+            name = String(row[keys[0]]);
+        }
+        
+        // Find the numeric value (prefer columns with 'count', 'total', 'amount', 'value')
+        const valueKeys = keys.filter(k => typeof row[k] === 'number');
+        
+        if (valueKeys.length > 0) {
+            // Prefer specific column names
+            const preferredKey = valueKeys.find(k => 
+                k.toLowerCase().includes('count') || 
+                k.toLowerCase().includes('total') ||
+                k.toLowerCase().includes('amount') ||
+                k.toLowerCase().includes('value')
+            );
+            
+            value = preferredKey ? row[preferredKey] : row[valueKeys[0]];
+        }
+        
+        console.log('[PIE CHART] Extracted - name:', name, 'value:', value);
         
         return {
             name: name,
@@ -469,6 +519,8 @@ function buildPieChartOption(data, chartType, chartConfig, baseOption, preset) {
             itemStyle: { color: preset.colors[index % preset.colors.length] }
         };
     });
+    
+    console.log('[PIE CHART] Final pieData:', pieData);
     
     // Calculate total for percentage display
     const total = pieData.reduce((sum, item) => sum + item.value, 0);
@@ -573,11 +625,122 @@ function downloadChart(chartId) {
 // Fullscreen chart
 function fullscreenChart(chartId) {
     const chartContainer = document.getElementById(chartId);
-    if (!chartContainer) return;
-    
-    if (chartContainer.requestFullscreen) {
-        chartContainer.requestFullscreen();
+    if (!chartContainer) {
+        console.error('Chart container not found:', chartId);
+        return;
     }
+    
+    const chart = window.chartRegistry[chartId];
+    if (!chart) {
+        console.error('Chart instance not found:', chartId);
+        return;
+    }
+    
+    // Check if already in fullscreen
+    if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement) {
+        // Exit fullscreen
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+        } else if (document.mozCancelFullScreen) {
+            document.mozCancelFullScreen();
+        } else if (document.msExitFullscreen) {
+            document.msExitFullscreen();
+        }
+        return;
+    }
+    
+    // Enter fullscreen
+    const requestFullscreen = chartContainer.requestFullscreen || 
+                             chartContainer.webkitRequestFullscreen || 
+                             chartContainer.mozRequestFullScreen || 
+                             chartContainer.msRequestFullscreen;
+    
+    if (requestFullscreen) {
+        requestFullscreen.call(chartContainer).then(() => {
+            console.log('Entered fullscreen mode');
+            // Resize chart to fit fullscreen
+            setTimeout(() => {
+                chart.resize();
+            }, 100);
+        }).catch(err => {
+            console.error('Error entering fullscreen:', err);
+            showNotification('Fullscreen not supported', 'error');
+        });
+    } else {
+        console.error('Fullscreen API not supported');
+        showNotification('Fullscreen not supported in this browser', 'error');
+    }
+}
+
+// Listen for fullscreen changes to resize chart
+document.addEventListener('fullscreenchange', handleFullscreenChange);
+document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+
+function handleFullscreenChange() {
+    const fullscreenElement = document.fullscreenElement || 
+                             document.webkitFullscreenElement || 
+                             document.mozFullScreenElement || 
+                             document.msFullscreenElement;
+    
+    if (fullscreenElement) {
+        // Entered fullscreen - resize the chart
+        const chartId = fullscreenElement.id;
+        const chart = window.chartRegistry[chartId];
+        if (chart) {
+            setTimeout(() => {
+                chart.resize();
+                console.log('Chart resized for fullscreen');
+            }, 100);
+        }
+    } else {
+        // Exited fullscreen - resize all charts
+        Object.keys(window.chartRegistry || {}).forEach(chartId => {
+            const chart = window.chartRegistry[chartId];
+            if (chart) {
+                setTimeout(() => {
+                    chart.resize();
+                    console.log('Chart resized after exiting fullscreen');
+                }, 100);
+            }
+        });
+    }
+}
+
+// Helper function for notifications (if not already defined)
+function showNotification(message, type = 'info') {
+    // Check if notification function exists in renderer
+    if (typeof window.showNotification === 'function') {
+        window.showNotification(message, type);
+        return;
+    }
+    
+    // Fallback notification
+    const toast = document.createElement('div');
+    toast.className = `toast-notification ${type}`;
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#007acc'};
+        color: white;
+        padding: 12px 20px;
+        border-radius: 4px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 10000;
+        animation: slideInRight 0.3s ease-out;
+    `;
+    toast.textContent = message;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.animation = 'slideInRight 0.3s ease-out reverse';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
 }
 
 // Make functions globally available

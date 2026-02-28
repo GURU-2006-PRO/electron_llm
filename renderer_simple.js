@@ -2267,3 +2267,12 @@ restoreSidebarWidths();
 
 console.log('Drag-to-resize functionality loaded');
 console.log('Drag the edges between sidebars and workspace to resize');
+
+
+// Make functions globally available for onclick handlers
+window.showHistoryPanel = showHistoryPanel;
+window.selectHistoryItem = selectHistoryItem;
+window.clearHistory = clearHistory;
+window.toggleBookmark = toggleBookmark;
+
+console.log('[GLOBAL] History functions exposed to window');

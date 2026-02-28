@@ -4313,3 +4313,28 @@ body.light-theme .related-analysis-btn:hover {
         grid-template-columns: repeat(2, 1fr);
     }
 }
+
+
+/* Fullscreen chart styles */
+.echart-container:fullscreen,
+.echart-container:-webkit-full-screen,
+.echart-container:-moz-full-screen,
+.echart-container:-ms-fullscreen {
+    width: 100vw !important;
+    height: 100vh !important;
+    background: #1e1e1e;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+/* Fullscreen animation */
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}

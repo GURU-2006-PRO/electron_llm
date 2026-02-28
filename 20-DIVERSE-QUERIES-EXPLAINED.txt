@@ -1,0 +1,593 @@
+================================================================================
+                    20 DIVERSE QUERIES - COMPREHENSIVE GUIDE
+                    Demonstrating Full System Capabilities
+================================================================================
+
+PURPOSE OF THIS DOCUMENT:
+This file contains 20 carefully crafted queries that demonstrate InsightX's
+ability to handle diverse analytical questions across 6 categories. Each query
+is explained with its significance and expected insights.
+
+QUERY CATEGORIES COVERED:
+1. Descriptive Analysis (4 queries)
+2. Comparative Analysis (4 queries)
+3. Temporal Analysis (3 queries)
+4. Segmentation Analysis (3 queries)
+5. Correlation Analysis (3 queries)
+6. Risk Analysis (3 queries)
+
+================================================================================
+CATEGORY 1: DESCRIPTIVE ANALYSIS
+================================================================================
+Purpose: Understand "what is" - basic statistics and distributions
+
+--------------------------------------------------------------------------------
+QUERY 1: Basic Aggregation
+--------------------------------------------------------------------------------
+QUERY:
+"What is the average transaction amount for bill payments?"
+
+WHAT IT SIGNIFIES:
+- Tests basic statistical calculation
+- Demonstrates understanding of transaction types
+- Shows ability to filter and aggregate
+
+EXPECTED INSIGHTS:
+- Average bill payment amount (e.g., ₹1,847)
+- Comparison to overall platform average
+- Distribution statistics (median, std deviation)
+- Context about bill payment behavior
+
+WHY IT'S IMPORTANT:
+Bill payments are a major use case for UPI. Understanding average amounts
+helps with pricing, limits, and fraud detection thresholds.
+
+--------------------------------------------------------------------------------
+QUERY 2: Multi-Dimensional Breakdown
+--------------------------------------------------------------------------------
+QUERY:
+"Show me transaction volume breakdown by transaction type and merchant category"
+
+WHAT IT SIGNIFIES:
+- Tests multi-dimensional grouping
+- Demonstrates handling of categorical data
+- Shows ability to create hierarchical breakdowns
+
+EXPECTED INSIGHTS:
+- P2P transfers: 42% of volume
+- P2M transactions: 35% of volume
+- Bill payments: 15% of volume
+- Breakdown by merchant categories within each type
+- Identification of dominant patterns
+
+WHY IT'S IMPORTANT:
+Understanding transaction mix helps with resource allocation, feature
+prioritization, and business strategy.
+
+--------------------------------------------------------------------------------
+QUERY 3: Statistical Distribution
+--------------------------------------------------------------------------------
+QUERY:
+"What is the distribution of transaction amounts across different ranges?"
+
+WHAT IT SIGNIFIES:
+- Tests statistical bucketing
+- Demonstrates understanding of distributions
+- Shows ability to identify patterns in continuous data
+
+EXPECTED INSIGHTS:
+- Small transactions (<₹500): 45% of volume
+- Medium transactions (₹500-2000): 35% of volume
+- Large transactions (>₹2000): 20% of volume
+- Identification of most common transaction ranges
+- Outlier detection
+
+WHY IT'S IMPORTANT:
+Transaction amount distribution affects fraud detection, pricing tiers,
+and user experience design.
+
+--------------------------------------------------------------------------------
+QUERY 4: Comprehensive Summary
+--------------------------------------------------------------------------------
+QUERY:
+"Give me a complete summary of transaction data including volumes, success rates, and key metrics"
+
+WHAT IT SIGNIFIES:
+- Tests ability to generate executive summaries
+- Demonstrates comprehensive data understanding
+- Shows ability to prioritize important metrics
+
+EXPECTED INSIGHTS:
+- Total transactions: 250,000
+- Overall success rate: 95.05%
+- Average transaction amount: ₹1,512
+- Peak transaction hours
+- Top performing segments
+- Key issues and opportunities
+
+WHY IT'S IMPORTANT:
+Executives need quick, comprehensive overviews for decision-making.
+
+================================================================================
+CATEGORY 2: COMPARATIVE ANALYSIS
+================================================================================
+Purpose: Understand "what differs" - comparisons between groups
+
+--------------------------------------------------------------------------------
+QUERY 5: Device Comparison
+--------------------------------------------------------------------------------
+QUERY:
+"Compare transaction success rates between Android and iOS users"
+
+WHAT IT SIGNIFIES:
+- Tests comparative analysis
+- Demonstrates understanding of device-specific issues
+- Shows ability to identify platform differences
+
+EXPECTED INSIGHTS:
+- Android: 95.2% success rate, 67% of users
+- iOS: 94.8% success rate, 33% of users
+- Difference is small but statistically significant
+- Explanation of why differences exist (network access patterns)
+
+WHY IT'S IMPORTANT:
+Platform-specific issues require different engineering solutions.
+Understanding device differences helps prioritize development.
+
+--------------------------------------------------------------------------------
+QUERY 6: Network Type Comparison
+--------------------------------------------------------------------------------
+QUERY:
+"How do transaction success rates differ across WiFi, 4G, and 3G networks?"
+
+WHAT IT SIGNIFIES:
+- Tests multi-group comparison
+- Demonstrates understanding of infrastructure impact
+- Shows ability to rank and prioritize
+
+EXPECTED INSIGHTS:
+- WiFi: 96.2% success (best)
+- 4G: 94.8% success (good)
+- 3G: 92.1% success (problematic)
+- Quantified impact of network quality
+- Recommendations for improvement
+
+WHY IT'S IMPORTANT:
+Network infrastructure is critical for payment success. This analysis
+guides infrastructure investment and optimization.
+
+--------------------------------------------------------------------------------
+QUERY 7: Bank Performance Comparison
+--------------------------------------------------------------------------------
+QUERY:
+"Which banks have the highest and lowest transaction failure rates?"
+
+WHAT IT SIGNIFIES:
+- Tests ranking and comparison
+- Demonstrates understanding of partner performance
+- Shows ability to identify outliers
+
+EXPECTED INSIGHTS:
+- Best performing banks: <3% failure rate
+- Worst performing banks: >8% failure rate
+- Platform average: 4.95% failure rate
+- Specific issues for each bank
+- Recommendations for improvement
+
+WHY IT'S IMPORTANT:
+Bank partnerships are critical. Identifying poor performers helps
+with partner management and SLA enforcement.
+
+--------------------------------------------------------------------------------
+QUERY 8: Age Group Behavior Comparison
+--------------------------------------------------------------------------------
+QUERY:
+"Compare transaction patterns between different age groups including amounts, frequency, and preferences"
+
+WHAT IT SIGNIFIES:
+- Tests demographic analysis
+- Demonstrates understanding of user segments
+- Shows ability to identify behavioral differences
+
+EXPECTED INSIGHTS:
+- 18-25: Small, frequent transactions, high mobile usage
+- 26-35: Moderate amounts, balanced usage
+- 36-45: Larger amounts, more bill payments
+- 46+: Fewer transactions, higher average amounts
+- Segment-specific recommendations
+
+WHY IT'S IMPORTANT:
+Different age groups need different features and experiences.
+This guides product development and marketing.
+
+================================================================================
+CATEGORY 3: TEMPORAL ANALYSIS
+================================================================================
+Purpose: Understand "when" - time-based patterns and trends
+
+--------------------------------------------------------------------------------
+QUERY 9: Peak Hours Analysis
+--------------------------------------------------------------------------------
+QUERY:
+"What are the peak transaction hours during the day?"
+
+WHAT IT SIGNIFIES:
+- Tests time-series analysis
+- Demonstrates understanding of usage patterns
+- Shows ability to identify temporal trends
+
+EXPECTED INSIGHTS:
+- Morning peak: 9-11 AM (commute, breakfast)
+- Lunch peak: 12-2 PM (food orders)
+- Evening peak: 7-9 PM (dinner, shopping)
+- Late night: 11 PM-1 AM (entertainment)
+- Capacity planning recommendations
+
+WHY IT'S IMPORTANT:
+Peak hours require more infrastructure capacity. Understanding patterns
+helps with resource allocation and cost optimization.
+
+--------------------------------------------------------------------------------
+QUERY 10: Weekday vs Weekend Patterns
+--------------------------------------------------------------------------------
+QUERY:
+"How do transaction patterns differ between weekdays and weekends?"
+
+WHAT IT SIGNIFIES:
+- Tests day-of-week analysis
+- Demonstrates understanding of behavioral cycles
+- Shows ability to identify weekly patterns
+
+EXPECTED INSIGHTS:
+- Weekdays: 71% of volume, smaller amounts, work-related
+- Weekends: 29% of volume, larger amounts, leisure spending
+- Different peak hours on weekends (later in day)
+- Different merchant categories (more food, entertainment)
+
+WHY IT'S IMPORTANT:
+Weekend behavior is different from weekday. This affects staffing,
+marketing campaigns, and feature releases.
+
+--------------------------------------------------------------------------------
+QUERY 11: Trend Analysis Over Time
+--------------------------------------------------------------------------------
+QUERY:
+"Show me transaction volume trends over the past month and identify any significant changes"
+
+WHAT IT SIGNIFIES:
+- Tests trend detection
+- Demonstrates understanding of growth patterns
+- Shows ability to identify anomalies
+
+EXPECTED INSIGHTS:
+- Overall growth trend: +2.3% month-over-month
+- Specific days with spikes (holidays, events)
+- Gradual increase in digital adoption
+- Seasonal patterns
+- Forecasting for next month
+
+WHY IT'S IMPORTANT:
+Understanding trends helps with capacity planning, business forecasting,
+and identifying growth opportunities.
+
+================================================================================
+CATEGORY 4: SEGMENTATION ANALYSIS
+================================================================================
+Purpose: Understand "who" - user groups and their characteristics
+
+--------------------------------------------------------------------------------
+QUERY 12: P2P User Segmentation
+--------------------------------------------------------------------------------
+QUERY:
+"Which age group uses P2P transfers most frequently and what are their characteristics?"
+
+WHAT IT SIGNIFIES:
+- Tests user segmentation
+- Demonstrates understanding of use cases
+- Shows ability to profile segments
+
+EXPECTED INSIGHTS:
+- 26-35 age group dominates (38% of P2P)
+- Average amount: ₹1,847
+- Peak usage: 8-10 PM weekdays
+- Primary use: Bill splitting, shared expenses
+- Segment-specific product recommendations
+
+WHY IT'S IMPORTANT:
+P2P is a key feature. Understanding who uses it helps with feature
+development and marketing targeting.
+
+--------------------------------------------------------------------------------
+QUERY 13: High-Value User Identification
+--------------------------------------------------------------------------------
+QUERY:
+"Identify and profile users who make high-value transactions (above ₹5000)"
+
+WHAT IT SIGNIFIES:
+- Tests value-based segmentation
+- Demonstrates understanding of premium users
+- Shows ability to identify VIP segments
+
+EXPECTED INSIGHTS:
+- 3.56% of transactions are high-value
+- Primarily 36-45 age group
+- Higher iOS usage (premium devices)
+- Lower failure rates (better networks)
+- Premium service recommendations
+
+WHY IT'S IMPORTANT:
+High-value users generate disproportionate revenue. They deserve
+premium features and priority support.
+
+--------------------------------------------------------------------------------
+QUERY 14: Merchant Category Segmentation
+--------------------------------------------------------------------------------
+QUERY:
+"Break down transaction patterns by merchant category and identify the most important segments"
+
+WHAT IT SIGNIFIES:
+- Tests business segmentation
+- Demonstrates understanding of use cases
+- Shows ability to prioritize segments
+
+EXPECTED INSIGHTS:
+- Food delivery: 18% of volume, time-sensitive
+- Bill payments: 15% of volume, scheduled
+- Shopping: 22% of volume, discretionary
+- Each segment has unique characteristics
+- Segment-specific optimization strategies
+
+WHY IT'S IMPORTANT:
+Different merchant categories have different needs. This guides
+partnership strategy and feature development.
+
+================================================================================
+CATEGORY 5: CORRELATION ANALYSIS
+================================================================================
+Purpose: Understand "relationships" - how variables relate to each other
+
+--------------------------------------------------------------------------------
+QUERY 15: Network-Success Correlation
+--------------------------------------------------------------------------------
+QUERY:
+"Is there a correlation between network type and transaction success rates? Quantify the relationship."
+
+WHAT IT SIGNIFIES:
+- Tests statistical correlation
+- Demonstrates understanding of causal relationships
+- Shows ability to quantify relationships
+
+EXPECTED INSIGHTS:
+- Strong positive correlation (r = 0.67)
+- Network quality directly impacts success
+- 3G has 8.2% packet loss vs 1.1% for WiFi
+- Quantified impact: 4.1 percentage point difference
+- Technical recommendations for improvement
+
+WHY IT'S IMPORTANT:
+Understanding correlations helps identify root causes and prioritize
+engineering efforts for maximum impact.
+
+--------------------------------------------------------------------------------
+QUERY 16: Amount-Failure Correlation
+--------------------------------------------------------------------------------
+QUERY:
+"Is there a relationship between transaction amount and failure rate?"
+
+WHAT IT SIGNIFIES:
+- Tests value-based correlation
+- Demonstrates understanding of fraud systems
+- Shows ability to identify threshold effects
+
+EXPECTED INSIGHTS:
+- Positive correlation: higher amounts = higher failure
+- Transactions >₹5000: 6.8% failure rate
+- Transactions <₹500: 4.2% failure rate
+- Caused by aggressive fraud detection
+- Threshold optimization recommendations
+
+WHY IT'S IMPORTANT:
+Fraud detection systems can be too aggressive. Understanding the
+amount-failure relationship helps optimize thresholds.
+
+--------------------------------------------------------------------------------
+QUERY 17: Time-Success Correlation
+--------------------------------------------------------------------------------
+QUERY:
+"How does transaction success rate vary by time of day and what factors contribute to this?"
+
+WHAT IT SIGNIFIES:
+- Tests temporal correlation
+- Demonstrates understanding of system load
+- Shows ability to identify capacity issues
+
+EXPECTED INSIGHTS:
+- Peak hours: 93.2% success (congestion)
+- Off-peak hours: 96.1% success (smooth)
+- Correlation with merchant capacity
+- Network congestion during peaks
+- Load balancing recommendations
+
+WHY IT'S IMPORTANT:
+Time-based patterns reveal capacity constraints. This guides
+infrastructure scaling and optimization.
+
+================================================================================
+CATEGORY 6: RISK ANALYSIS
+================================================================================
+Purpose: Understand "risks" - fraud, failures, and anomalies
+
+--------------------------------------------------------------------------------
+QUERY 18: Fraud Pattern Analysis
+--------------------------------------------------------------------------------
+QUERY:
+"What percentage of high-value transactions are flagged for fraud review and what are the false positive rates?"
+
+WHAT IT SIGNIFIES:
+- Tests fraud detection analysis
+- Demonstrates understanding of risk management
+- Shows ability to optimize detection systems
+
+EXPECTED INSIGHTS:
+- 2.78% of high-value transactions flagged
+- 95.14% are false positives (legitimate)
+- Only 4.86% are confirmed fraud
+- Cost of false positives: ₹1.8M monthly
+- Optimization recommendations with ROI
+
+WHY IT'S IMPORTANT:
+Fraud detection is critical but false positives hurt user experience.
+This analysis helps optimize the balance.
+
+--------------------------------------------------------------------------------
+QUERY 19: Failure Risk Assessment
+--------------------------------------------------------------------------------
+QUERY:
+"Identify transaction segments with the highest failure risk and quantify the business impact"
+
+WHAT IT SIGNIFIES:
+- Tests risk identification
+- Demonstrates understanding of business impact
+- Shows ability to prioritize interventions
+
+EXPECTED INSIGHTS:
+- 3G + Android + P2M: 7.2% failure (highest risk)
+- Represents 8.3% of transactions
+- ₹4.2M monthly revenue loss
+- Specific technical causes identified
+- Prioritized fix recommendations
+
+WHY IT'S IMPORTANT:
+Not all failures are equal. Focusing on high-impact segments
+maximizes ROI of engineering efforts.
+
+--------------------------------------------------------------------------------
+QUERY 20: Anomaly Detection
+--------------------------------------------------------------------------------
+QUERY:
+"Identify unusual transaction patterns that deviate from normal behavior and assess potential risks"
+
+WHAT IT SIGNIFIES:
+- Tests anomaly detection
+- Demonstrates understanding of statistical outliers
+- Shows ability to identify emerging issues
+
+EXPECTED INSIGHTS:
+- 8,890 transactions exceed 3x IQR threshold
+- Unusual state-bank combinations detected
+- Spike in late-night transactions from new region
+- Each anomaly explained and categorized
+- Risk assessment and recommendations
+
+WHY IT'S IMPORTANT:
+Anomalies can indicate fraud, system issues, or new opportunities.
+Early detection prevents problems and identifies trends.
+
+================================================================================
+WHAT THESE 20 QUERIES DEMONSTRATE
+================================================================================
+
+1. BREADTH OF CAPABILITIES
+   - Handles simple counts to complex statistical analysis
+   - Covers all major analytical categories
+   - Demonstrates versatility
+
+2. DEPTH OF ANALYSIS
+   - Not just data retrieval, but intelligent insights
+   - Root cause identification
+   - Business impact quantification
+   - Actionable recommendations
+
+3. BUSINESS VALUE
+   - Every query addresses real business questions
+   - Insights lead to concrete actions
+   - ROI calculations included
+   - Prioritized recommendations
+
+4. TECHNICAL SOPHISTICATION
+   - Statistical rigor (correlations, distributions)
+   - Multi-dimensional analysis
+   - Temporal pattern recognition
+   - Anomaly detection
+
+5. USER-CENTRIC DESIGN
+   - Natural language queries (no SQL)
+   - Conversational interface
+   - Context-aware responses
+   - Follow-up suggestions
+
+================================================================================
+HOW TO USE THIS FILE
+================================================================================
+
+FOR DEMO VIDEO:
+- Select 6-8 queries covering all categories
+- Show progression from simple to complex
+- Emphasize insights and recommendations
+- Demonstrate different chart types
+
+FOR LIVE PRESENTATION:
+- Use 3-4 impressive queries
+- Focus on business impact
+- Show real-time processing
+- Highlight AI-powered insights
+
+FOR DOCUMENTATION:
+- Include all 20 as examples
+- Show system versatility
+- Demonstrate comprehensive capabilities
+- Prove production-readiness
+
+FOR TESTING:
+- Use as test suite
+- Verify all queries work
+- Check insight quality
+- Validate recommendations
+
+================================================================================
+COMPETITIVE ADVANTAGES DEMONSTRATED
+================================================================================
+
+1. COMPREHENSIVE COVERAGE
+   Most tools handle 1-2 categories. InsightX handles all 6.
+
+2. INTELLIGENT INSIGHTS
+   Most tools return data. InsightX provides analysis and recommendations.
+
+3. BUSINESS FOCUS
+   Most tools are technical. InsightX speaks business language.
+
+4. ACTIONABLE OUTPUT
+   Most tools show charts. InsightX provides action plans with ROI.
+
+5. NATURAL LANGUAGE
+   Most tools require SQL. InsightX uses conversation.
+
+6. MULTI-MODEL AI
+   Most tools use one model. InsightX uses 3 with automatic fallback.
+
+7. USER-DRIVEN VISUALIZATION
+   Most tools force chart types. InsightX lets users choose.
+
+8. PRODUCTION-READY
+   Most demos are prototypes. InsightX has enterprise features.
+
+================================================================================
+CONCLUSION
+================================================================================
+
+These 20 queries demonstrate that InsightX is not just an analytics tool,
+but a complete AI-powered business intelligence platform that:
+
+✓ Understands natural language questions
+✓ Processes large datasets efficiently (250K records)
+✓ Generates intelligent insights with context
+✓ Provides actionable recommendations with ROI
+✓ Adapts to user preferences (visualization choice)
+✓ Handles diverse analytical needs (6 categories)
+✓ Delivers production-grade quality (error handling, export, history)
+
+This is what separates InsightX from basic query tools and positions it
+as a serious enterprise solution for data-driven decision making.
+
+================================================================================
