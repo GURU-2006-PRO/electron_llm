@@ -44,6 +44,19 @@ class ChatDatabase:
             )
         ''')
         
+        # API quota tracking table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS api_quota (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                model_name TEXT NOT NULL,
+                date DATE NOT NULL,
+                used_count INTEGER DEFAULT 0,
+                limit_count INTEGER NOT NULL,
+                last_reset DATETIME,
+                UNIQUE(model_name, date)
+            )
+        ''')
+        
         # Conversation sessions table (for grouping related queries)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS sessions (
@@ -337,3 +350,102 @@ def get_database() -> ChatDatabase:
     if _db_instance is None:
         _db_instance = ChatDatabase()
     return _db_instance
+
+    
+    def create_quota_table(self):
+        """Create API quota tracking table"""
+        cursor = self.conn.cursor()
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS api_quota (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                model_name TEXT NOT NULL,
+                date DATE NOT NULL,
+                used_count INTEGER DEFAULT 0,
+                limit_count INTEGER NOT NULL,
+                last_reset DATETIME,
+                UNIQUE(model_name, date)
+            )
+        ''')
+        
+        self.conn.commit()
+        print("[OK] API quota table created")
+    
+    def get_quota_usage(self, model_name: str, date: str = None) -> Dict:
+        """Get quota usage for a specific model and date"""
+        if date is None:
+            date = datetime.now().strftime('%Y-%m-%d')
+        
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            SELECT used_count, limit_count, last_reset
+            FROM api_quota
+            WHERE model_name = ? AND date = ?
+        ''', (model_name, date))
+        
+        row = cursor.fetchone()
+        
+        if row:
+            return {
+                'used': row['used_count'],
+                'limit': row['limit_count'],
+                'last_reset': row['last_reset']
+            }
+        else:
+            return {'used': 0, 'limit': 0, 'last_reset': None}
+    
+    def increment_quota(self, model_name: str, limit: int) -> Dict:
+        """Increment quota usage for a model (creates entry if doesn't exist)"""
+        today = datetime.now().strftime('%Y-%m-%d')
+        now = datetime.now().isoformat()
+        
+        cursor = self.conn.cursor()
+        
+        # Try to increment existing record
+        cursor.execute('''
+            INSERT INTO api_quota (model_name, date, used_count, limit_count, last_reset)
+            VALUES (?, ?, 1, ?, ?)
+            ON CONFLICT(model_name, date) 
+            DO UPDATE SET used_count = used_count + 1
+        ''', (model_name, today, limit, now))
+        
+        self.conn.commit()
+        
+        # Return updated usage
+        return self.get_quota_usage(model_name, today)
+    
+    def reset_quota(self, model_name: str = None):
+        """Reset quota for a specific model or all models"""
+        today = datetime.now().strftime('%Y-%m-%d')
+        now = datetime.now().isoformat()
+        
+        cursor = self.conn.cursor()
+        
+        if model_name:
+            cursor.execute('''
+                UPDATE api_quota
+                SET used_count = 0, last_reset = ?
+                WHERE model_name = ? AND date = ?
+            ''', (now, model_name, today))
+        else:
+            cursor.execute('''
+                UPDATE api_quota
+                SET used_count = 0, last_reset = ?
+                WHERE date = ?
+            ''', (now, today))
+        
+        self.conn.commit()
+        print(f"[QUOTA] Reset quota for {model_name or 'all models'}")
+    
+    def cleanup_old_quota(self, days_to_keep: int = 7):
+        """Delete quota records older than specified days"""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            DELETE FROM api_quota
+            WHERE date < date('now', '-' || ? || ' days')
+        ''', (days_to_keep,))
+        
+        deleted = cursor.rowcount
+        self.conn.commit()
+        print(f"[QUOTA] Cleaned up {deleted} old quota records")
+        return deleted

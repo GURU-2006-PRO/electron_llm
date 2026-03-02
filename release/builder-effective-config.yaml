@@ -1,0 +1,37 @@
+directories:
+  output: release
+  buildResources: build
+appId: com.insightx.analytics
+productName: InsightX Analytics
+files:
+  - filter:
+      - '**/*'
+      - '!backend/**/*'
+      - '!release/**/*'
+      - '!dist/**/*'
+      - '!.git/**/*'
+      - '!*.md'
+      - '!*.bat'
+extraResources:
+  - from: backend/dist/api_server.exe
+    to: backend/dist/api_server.exe
+  - from: backend/data
+    to: backend/data
+    filter:
+      - '**/*'
+  - from: backend/.env
+    to: backend/.env
+win:
+  target: nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+mac:
+  target: dmg
+linux:
+  target:
+    - AppImage
+    - deb
+electronVersion: 28.3.3

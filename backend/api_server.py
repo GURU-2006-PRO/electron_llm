@@ -5,6 +5,7 @@ import numpy as np
 import os
 import json
 import time
+from datetime import datetime
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -409,23 +410,60 @@ def advanced_query():
         
         # STEP 1: Generate Pandas query specification
         print("[STEP 1] Generating query specification...")
-        print("[INFO] Using Gemini API for query generation")
         
-        # Use Gemini API instead of OpenRouter
+        # Use OpenRouter/DeepSeek if Gemini fails
         query_prompt = f"""{PANDAS_GENERATION_PROMPT}
 
 User Question: {user_question}
 
 Generate the query specification JSON."""
         
+        raw_query = None
+        
+        # Try Gemini first, fallback to OpenRouter
         try:
+            print("[INFO] Trying Gemini API for query generation")
             query_resp = llm_service.gemini_model.generate_content(query_prompt)
             raw_query = query_resp.text
-        except Exception as e:
-            print(f"[ERROR] Gemini API failed for query generation: {e}")
+            track_api_usage('gemini_3_flash')
+            print("[SUCCESS] Gemini API worked")
+            
+        except Exception as gemini_error:
+            print(f"[WARNING] Gemini API failed: {gemini_error}")
+            print("[INFO] Falling back to OpenRouter/DeepSeek for query generation")
+            
+            try:
+                # Use OpenRouter as fallback
+                import openai
+                openrouter_key = os.getenv('OPENROUTER_API_KEY')
+                
+                if not openrouter_key:
+                    raise Exception("OpenRouter API key not found")
+                
+                client = openai.OpenAI(
+                    base_url="https://openrouter.ai/api/v1",
+                    api_key=openrouter_key
+                )
+                
+                response = client.chat.completions.create(
+                    model="deepseek/deepseek-chat",
+                    messages=[{"role": "user", "content": query_prompt}]
+                )
+                
+                raw_query = response.choices[0].message.content
+                print("[SUCCESS] OpenRouter/DeepSeek worked for query generation")
+                
+            except Exception as openrouter_error:
+                print(f"[ERROR] OpenRouter also failed: {openrouter_error}")
+                return jsonify({
+                    "status": "error",
+                    "error": f"Both Gemini and OpenRouter failed. Gemini: {str(gemini_error)}, OpenRouter: {str(openrouter_error)}"
+                })
+        
+        if not raw_query:
             return jsonify({
                 "status": "error",
-                "error": f"Gemini API error: {str(e)}"
+                "error": "Failed to generate query specification"
             })
         
         raw_query = strip_fences(raw_query)
@@ -554,6 +592,15 @@ Return ONLY valid JSON, no markdown, no extra text."""
             try:
                 gemini_response = gemini_model.generate_content(prompt)
                 raw_insight = gemini_response.text
+                
+                # Track API usage in database
+                if insight_model == 'gemini-3-flash':
+                    track_api_usage('gemini_3_flash')
+                elif insight_model == 'gemini-2.5-flash-1':
+                    track_api_usage('gemini_2_5_flash_1')
+                elif insight_model == 'gemini-2.5-flash-2':
+                    track_api_usage('gemini_2_5_flash_2')
+                
             except Exception as e:
                 error_str = str(e)
                 print(f"[ERROR] Gemini API failed: {e}")
@@ -1197,21 +1244,6 @@ def expand_query():
         print(f"[ERROR] Expand query failed: {e}")
         return jsonify({"status": "error", "error": str(e)})
 
-if __name__ == '__main__':
-    print("=" * 50)
-    print("InsightX Backend Server")
-    
-    # Get settings from environment
-    host = os.getenv('FLASK_HOST', '127.0.0.1')
-    port = int(os.getenv('FLASK_PORT', 5000))
-    debug = os.getenv('FLASK_DEBUG', 'True').lower() == 'true'
-    
-    print(f"Running on http://{host}:{port}")
-    print("=" * 50)
-    
-    app.run(debug=debug, host=host, port=port, use_reloader=False)
-
-
 # ============================================================================
 # API KEY MANAGEMENT ENDPOINTS
 # ============================================================================
@@ -1298,14 +1330,23 @@ def update_api_keys():
     try:
         data = request.json
         
-        # Path to .env file
-        env_path = os.path.join(os.path.dirname(__file__), '.env')
+        # Path to .env file - handle both dev and production
+        if getattr(sys, 'frozen', False):
+            # Running as EXE - .env is in the same folder as the exe
+            env_path = os.path.join(os.path.dirname(sys.executable), '.env')
+        else:
+            # Running as script
+            env_path = os.path.join(os.path.dirname(__file__), '.env')
+        
+        print(f"[INFO] Updating .env file at: {env_path}")
         
         # Read current .env file
         env_lines = []
         if os.path.exists(env_path):
             with open(env_path, 'r') as f:
                 env_lines = f.readlines()
+        else:
+            print(f"[WARNING] .env file not found at {env_path}, creating new one")
         
         # Update keys
         keys_to_update = {
@@ -1339,17 +1380,133 @@ def update_api_keys():
         with open(env_path, 'w') as f:
             f.writelines(updated_lines)
         
-        # Update environment variables
-        for key, value in keys_to_update.items():
-            if value:
-                os.environ[key] = value
+        print(f"[SUCCESS] API keys updated in {env_path}")
         
-        return jsonify({
-            "status": "success",
-            "message": "API keys updated successfully. Please restart the backend to apply changes."
-        })
+        # Reload environment variables
+        from dotenv import load_dotenv
+        load_dotenv(env_path, override=True)
+        
+        return jsonify({"status": "success", "message": "API keys updated successfully. Please restart the app for changes to take effect."})
         
     except Exception as e:
         print(f"[ERROR] Failed to update API keys: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
 
+# ============================================================================
+# QUOTA LIMITS CONFIGURATION
+# ============================================================================
+
+QUOTA_LIMITS = {
+    'gemini_3_flash': 20,
+    'gemini_2_5_flash_1': 1500,
+    'gemini_2_5_flash_2': 1500,
+    'groq': 0  # 0 means unlimited
+}
+
+# ============================================================================
+# QUOTA TRACKING ENDPOINTS
+# ============================================================================
+
+@app.route('/api-quota-status', methods=['GET'])
+def get_api_quota_status():
+    """Get current API quota usage for all keys from database"""
+    try:
+        if not db_available:
+            return jsonify({"status": "error", "error": "Database not available"}), 500
+        
+        quotas = {}
+        
+        # Check which keys are configured
+        gemini_3_key = os.getenv('GEMINI_API_KEY_3_FLASH')
+        gemini_25_1_key = os.getenv('GEMINI_API_KEY_2_5_FLASH_1')
+        gemini_25_2_key = os.getenv('GEMINI_API_KEY_2_5_FLASH_2')
+        groq_key = os.getenv('GROQ_API_KEY')
+        
+        # Get usage from database
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        gemini_3_usage = db.get_quota_usage('gemini_3_flash', today)
+        quotas['gemini_3_flash'] = {
+            'has_key': bool(gemini_3_key and gemini_3_key != ''),
+            'used': gemini_3_usage['used'],
+            'limit': QUOTA_LIMITS['gemini_3_flash'],
+            'remaining': max(0, QUOTA_LIMITS['gemini_3_flash'] - gemini_3_usage['used'])
+        }
+        
+        gemini_25_1_usage = db.get_quota_usage('gemini_2_5_flash_1', today)
+        quotas['gemini_2_5_flash_1'] = {
+            'has_key': bool(gemini_25_1_key and gemini_25_1_key != ''),
+            'used': gemini_25_1_usage['used'],
+            'limit': QUOTA_LIMITS['gemini_2_5_flash_1'],
+            'remaining': max(0, QUOTA_LIMITS['gemini_2_5_flash_1'] - gemini_25_1_usage['used'])
+        }
+        
+        gemini_25_2_usage = db.get_quota_usage('gemini_2_5_flash_2', today)
+        quotas['gemini_2_5_flash_2'] = {
+            'has_key': bool(gemini_25_2_key and gemini_25_2_key != ''),
+            'used': gemini_25_2_usage['used'],
+            'limit': QUOTA_LIMITS['gemini_2_5_flash_2'],
+            'remaining': max(0, QUOTA_LIMITS['gemini_2_5_flash_2'] - gemini_25_2_usage['used'])
+        }
+        
+        groq_usage = db.get_quota_usage('groq', today)
+        quotas['groq'] = {
+            'has_key': bool(groq_key and groq_key != ''),
+            'used': groq_usage['used'],
+            'limit': 0,  # Unlimited
+            'remaining': -1  # -1 means unlimited
+        }
+        
+        return jsonify({
+            "status": "success",
+            "quotas": quotas
+        })
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to get quota status: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# ============================================================================
+# QUOTA TRACKING HELPER FUNCTION
+# ============================================================================
+
+def track_api_usage(model_name: str):
+    """Track API usage in database (call this after each successful API call)"""
+    if not db_available:
+        return
+    
+    try:
+        # Check if db has increment_quota method
+        if hasattr(db, 'increment_quota'):
+            limit = QUOTA_LIMITS.get(model_name, 0)
+            usage = db.increment_quota(model_name, limit)
+            print(f"[QUOTA] {model_name}: {usage['used']}/{limit} used")
+            return usage
+        else:
+            # Quota tracking not available in this database version
+            return None
+    except Exception as e:
+        print(f"[ERROR] Failed to track API usage: {e}")
+        return None
+
+# ============================================================================
+# MAIN - START SERVER
+# ============================================================================
+
+if __name__ == '__main__':
+    print("=" * 50)
+    print("InsightX Backend Server")
+    
+    # Get settings from environment
+    host = os.getenv('FLASK_HOST', '127.0.0.1')
+    port = int(os.getenv('FLASK_PORT', 5000))
+    debug = os.getenv('FLASK_DEBUG', 'True').lower() == 'true'
+    
+    print(f"Running on http://{host}:{port}")
+    print("=" * 50)
+    
+    app.run(debug=debug, host=host, port=port, use_reloader=False)

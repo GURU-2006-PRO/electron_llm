@@ -26,26 +26,23 @@
       "output": "release"
     },
     "files": [
-      "index_simple.html",
-      "renderer_simple.js",
-      "main.js",
-      "chart-enhancements.js",
-      "chart-system.js",
-      "styles/**/*",
-      "features/**/*",
+      "**/*",
       "!backend/**/*",
-      "!node_modules/**/*",
-      "!**/*.md",
-      "!.git"
+      "!release/**/*",
+      "!dist/**/*",
+      "!.git/**/*",
+      "!*.md",
+      "!*.bat"
     ],
     "extraResources": [
       {
         "from": "backend/dist/api_server.exe",
-        "to": "backend/api_server.exe"
+        "to": "backend/dist/api_server.exe"
       },
       {
         "from": "backend/data",
-        "to": "backend/data"
+        "to": "backend/data",
+        "filter": ["**/*"]
       },
       {
         "from": "backend/.env",
@@ -59,9 +56,7 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "installerIcon": "assets/icon.ico",
-      "uninstallerIcon": "assets/icon.ico"
+      "createStartMenuShortcut": true
     },
     "mac": {
       "target": "dmg"

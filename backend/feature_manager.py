@@ -9,7 +9,7 @@ from statistical_significance import (
     calculate_proportion_test
 )
 from anomaly_detector import scan_for_anomalies
-from methodology_explainer import MethodologyExplainer
+from method_explainer import MethodologyExplainer
 from query_suggestions import QuerySuggestionEngine
 import pandas as pd
 from typing import Dict, List

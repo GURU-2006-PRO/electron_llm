@@ -291,72 +291,140 @@
                 <button class="modal-close" onclick="closeApiKeyModal()">&times;</button>
             </div>
             <div class="modal-body">
+                <!-- Backend Status Banner -->
+                <div id="backendStatusBanner" class="backend-status-banner" style="display: none;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <div>
+                        <strong>Backend Not Connected</strong>
+                        <br><small>Start the backend server to enable full functionality. Keys will be saved locally for now.</small>
+                    </div>
+                </div>
+                
                 <div class="api-key-section">
                     <label class="api-key-label">
-                        <i class="fas fa-robot"></i> Gemini 3.0 Flash (Primary)
+                        <span>
+                            <i class="fas fa-robot"></i>
+                            Gemini 3.0 Flash (Primary)
+                        </span>
                         <span class="api-key-status" id="gemini3Status">
-                            <i class="fas fa-spinner fa-spin"></i> Checking...
+                            <i class="fas fa-minus-circle"></i> Not set
                         </span>
                     </label>
+                    <div class="api-key-quota" id="gemini3Quota" style="display: none;">
+                        <div class="quota-bar">
+                            <div class="quota-fill" id="gemini3QuotaFill"></div>
+                        </div>
+                        <small class="quota-text" id="gemini3QuotaText">0/20 requests used today</small>
+                    </div>
                     <div class="api-key-input-group">
                         <input type="password" id="gemini3Key" class="api-key-input" placeholder="AIzaSy..." />
-                        <button class="api-key-toggle" onclick="toggleKeyVisibility('gemini3Key')">
+                        <button class="api-key-toggle" onclick="toggleKeyVisibility('gemini3Key')" title="Toggle visibility">
                             <i class="fas fa-eye"></i>
                         </button>
                     </div>
-                    <small class="api-key-hint">20 requests/day - Get from: aistudio.google.com/app/apikey</small>
+                    <small class="api-key-hint">
+                        <i class="fas fa-info-circle"></i> 20 requests/day • Get your key: 
+                        <a href="#" onclick="openExternalLink('https://aistudio.google.com/app/apikey'); return false;" class="api-key-link">
+                            aistudio.google.com/app/apikey
+                        </a>
+                    </small>
                 </div>
 
                 <div class="api-key-section">
                     <label class="api-key-label">
-                        <i class="fas fa-robot"></i> Gemini 2.5 Flash #1 (Fallback)
+                        <span>
+                            <i class="fas fa-robot"></i>
+                            Gemini 2.5 Flash #1 (Fallback)
+                        </span>
                         <span class="api-key-status" id="gemini25_1Status">
-                            <i class="fas fa-spinner fa-spin"></i> Checking...
+                            <i class="fas fa-minus-circle"></i> Not set
                         </span>
                     </label>
+                    <div class="api-key-quota" id="gemini25_1Quota" style="display: none;">
+                        <div class="quota-bar">
+                            <div class="quota-fill" id="gemini25_1QuotaFill"></div>
+                        </div>
+                        <small class="quota-text" id="gemini25_1QuotaText">0/1500 requests used today</small>
+                    </div>
                     <div class="api-key-input-group">
                         <input type="password" id="gemini25_1Key" class="api-key-input" placeholder="AIzaSy..." />
-                        <button class="api-key-toggle" onclick="toggleKeyVisibility('gemini25_1Key')">
+                        <button class="api-key-toggle" onclick="toggleKeyVisibility('gemini25_1Key')" title="Toggle visibility">
                             <i class="fas fa-eye"></i>
                         </button>
                     </div>
-                    <small class="api-key-hint">1500 requests/day</small>
+                    <small class="api-key-hint">
+                        <i class="fas fa-info-circle"></i> 1500 requests/day • Get your key: 
+                        <a href="#" onclick="openExternalLink('https://aistudio.google.com/app/apikey'); return false;" class="api-key-link">
+                            aistudio.google.com/app/apikey
+                        </a>
+                    </small>
                 </div>
 
                 <div class="api-key-section">
                     <label class="api-key-label">
-                        <i class="fas fa-robot"></i> Gemini 2.5 Flash #2 (Backup)
+                        <span>
+                            <i class="fas fa-robot"></i>
+                            Gemini 2.5 Flash #2 (Backup)
+                        </span>
                         <span class="api-key-status" id="gemini25_2Status">
-                            <i class="fas fa-spinner fa-spin"></i> Checking...
+                            <i class="fas fa-minus-circle"></i> Not set
                         </span>
                     </label>
+                    <div class="api-key-quota" id="gemini25_2Quota" style="display: none;">
+                        <div class="quota-bar">
+                            <div class="quota-fill" id="gemini25_2QuotaFill"></div>
+                        </div>
+                        <small class="quota-text" id="gemini25_2QuotaText">0/1500 requests used today</small>
+                    </div>
                     <div class="api-key-input-group">
                         <input type="password" id="gemini25_2Key" class="api-key-input" placeholder="AIzaSy..." />
-                        <button class="api-key-toggle" onclick="toggleKeyVisibility('gemini25_2Key')">
+                        <button class="api-key-toggle" onclick="toggleKeyVisibility('gemini25_2Key')" title="Toggle visibility">
                             <i class="fas fa-eye"></i>
                         </button>
                     </div>
-                    <small class="api-key-hint">1500 requests/day</small>
+                    <small class="api-key-hint">
+                        <i class="fas fa-info-circle"></i> 1500 requests/day • Get your key: 
+                        <a href="#" onclick="openExternalLink('https://aistudio.google.com/app/apikey'); return false;" class="api-key-link">
+                            aistudio.google.com/app/apikey
+                        </a>
+                    </small>
                 </div>
 
                 <div class="api-key-section">
                     <label class="api-key-label">
-                        <i class="fas fa-bolt"></i> Groq API (Optional)
+                        <span>
+                            <i class="fas fa-bolt"></i>
+                            Groq API (Optional)
+                        </span>
                         <span class="api-key-status" id="groqStatus">
-                            <i class="fas fa-spinner fa-spin"></i> Checking...
+                            <i class="fas fa-minus-circle"></i> Not set
                         </span>
                     </label>
+                    <div class="api-key-quota" id="groqQuota" style="display: none;">
+                        <div class="quota-bar">
+                            <div class="quota-fill" id="groqQuotaFill"></div>
+                        </div>
+                        <small class="quota-text" id="groqQuotaText">Unlimited</small>
+                    </div>
                     <div class="api-key-input-group">
                         <input type="password" id="groqKey" class="api-key-input" placeholder="gsk_..." />
-                        <button class="api-key-toggle" onclick="toggleKeyVisibility('groqKey')">
+                        <button class="api-key-toggle" onclick="toggleKeyVisibility('groqKey')" title="Toggle visibility">
                             <i class="fas fa-eye"></i>
                         </button>
                     </div>
-                    <small class="api-key-hint">500K tokens/day - Get from: console.groq.com/keys</small>
+                    <small class="api-key-hint">
+                        <i class="fas fa-info-circle"></i> 500K tokens/day • Get your key: 
+                        <a href="#" onclick="openExternalLink('https://console.groq.com/keys'); return false;" class="api-key-link">
+                            console.groq.com/keys
+                        </a>
+                    </small>
                 </div>
             </div>
             <div class="modal-footer">
                 <button class="btn-secondary" onclick="closeApiKeyModal()">Cancel</button>
+                <button class="btn-info" onclick="checkAllQuotas()" style="margin-right: auto;">
+                    <i class="fas fa-chart-bar"></i> Check Quota Status
+                </button>
                 <button class="btn-primary" onclick="saveApiKeys()">
                     <i class="fas fa-save"></i> Save & Test Keys
                 </button>

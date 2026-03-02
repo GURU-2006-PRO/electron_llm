@@ -90,7 +90,7 @@ async function autoLoadDataset() {
         
     } catch (error) {
         console.error('Dataset check failed:', error);
-        addMessage('Error: Dataset not loaded. Make sure transactions.csv is in backend/data/', false);
+        // Don't show error message to user - backend will handle it
     }
 }
 
@@ -784,6 +784,9 @@ function showHistoryPanel() {
     inputContainer.style.position = 'relative';
     inputContainer.appendChild(panel);
 }
+
+// Export immediately after definition
+window.showHistoryPanel = showHistoryPanel;
 
 // Create history item HTML
 function createHistoryItem(item, index) {
@@ -2293,26 +2296,156 @@ function showApiKeyModal() {
 
 // Load current API keys from backend
 async function loadCurrentApiKeys() {
-    try {
-        const response = await axios.get(`${API_URL}/get-api-keys`);
-        
-        if (response.data.status === 'success') {
-            const keys = response.data.keys;
+    const backendBanner = document.getElementById('backendStatusBanner');
+    
+    // Retry logic for backend connection
+    const maxRetries = 3;
+    let retryCount = 0;
+    
+    while (retryCount < maxRetries) {
+        try {
+            console.log(`[API KEYS] Loading from backend (attempt ${retryCount + 1}/${maxRetries})...`);
+            const response = await axios.get(`${API_URL}/get-api-keys`, { timeout: 3000 });
             
-            // Populate input fields with current keys
-            document.getElementById('gemini3Key').value = keys.GEMINI_API_KEY_3_FLASH || '';
-            document.getElementById('gemini25_1Key').value = keys.GEMINI_API_KEY_2_5_FLASH_1 || '';
-            document.getElementById('gemini25_2Key').value = keys.GEMINI_API_KEY_2_5_FLASH_2 || '';
-            document.getElementById('groqKey').value = keys.GROQ_API_KEY || '';
+            console.log('[API KEYS] Response:', response.data);
             
-            // Check status of each key
-            checkAllApiKeys();
+            if (response.data.status === 'success') {
+                const keys = response.data.keys;
+                
+                // Populate input fields with current keys
+                document.getElementById('gemini3Key').value = keys.GEMINI_API_KEY_3_FLASH || '';
+                document.getElementById('gemini25_1Key').value = keys.GEMINI_API_KEY_2_5_FLASH_1 || '';
+                document.getElementById('gemini25_2Key').value = keys.GEMINI_API_KEY_2_5_FLASH_2 || '';
+                document.getElementById('groqKey').value = keys.GROQ_API_KEY || '';
+                
+                // Update status indicators based on whether keys exist
+                updateKeyStatus('gemini3Status', keys.GEMINI_API_KEY_3_FLASH);
+                updateKeyStatus('gemini25_1Status', keys.GEMINI_API_KEY_2_5_FLASH_1);
+                updateKeyStatus('gemini25_2Status', keys.GEMINI_API_KEY_2_5_FLASH_2);
+                updateKeyStatus('groqStatus', keys.GROQ_API_KEY);
+                
+                // Hide backend warning banner
+                if (backendBanner) backendBanner.style.display = 'none';
+                
+                console.log('[API KEYS] Loaded successfully from backend');
+                
+                // Load quota information
+                loadApiQuotas();
+                return; // Success - exit function
+            }
+        } catch (error) {
+            console.error(`[API KEYS] Attempt ${retryCount + 1} failed:`, error.message);
+            retryCount++;
+            
+            if (retryCount < maxRetries) {
+                // Wait before retry
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
         }
-    } catch (error) {
-        console.error('Failed to load API keys:', error);
-        showNotification('Failed to load current API keys', 'error');
+    }
+    
+    // All retries failed - use localStorage fallback
+    console.log('[API KEYS] Backend not available after retries, using localStorage');
+    
+    // Show backend warning banner
+    if (backendBanner) backendBanner.style.display = 'flex';
+    
+    // Backend not available - load from localStorage as fallback
+    const gemini3 = localStorage.getItem('GEMINI_API_KEY_3_FLASH') || '';
+    const gemini25_1 = localStorage.getItem('GEMINI_API_KEY_2_5_FLASH_1') || '';
+    const gemini25_2 = localStorage.getItem('GEMINI_API_KEY_2_5_FLASH_2') || '';
+    const groq = localStorage.getItem('GROQ_API_KEY') || '';
+    
+    document.getElementById('gemini3Key').value = gemini3;
+    document.getElementById('gemini25_1Key').value = gemini25_1;
+    document.getElementById('gemini25_2Key').value = gemini25_2;
+    document.getElementById('groqKey').value = groq;
+    
+    updateKeyStatus('gemini3Status', gemini3);
+    updateKeyStatus('gemini25_1Status', gemini25_1);
+    updateKeyStatus('gemini25_2Status', gemini25_2);
+    updateKeyStatus('groqStatus', groq);
+    
+    console.log('[API KEYS] Loaded from localStorage as fallback');
+}
+
+// Update key status indicator
+function updateKeyStatus(statusId, keyValue) {
+    const statusElement = document.getElementById(statusId);
+    if (keyValue && keyValue.trim() !== '') {
+        statusElement.innerHTML = '<i class="fas fa-check-circle"></i> Configured';
+        statusElement.className = 'api-key-status valid';
+    } else {
+        statusElement.innerHTML = '<i class="fas fa-minus-circle"></i> Not set';
+        statusElement.className = 'api-key-status invalid';
     }
 }
+
+// Load API quota information
+async function loadApiQuotas() {
+    try {
+        const response = await axios.get(`${API_URL}/api-quota-status`);
+        
+        if (response.data.status === 'success') {
+            const quotas = response.data.quotas;
+            
+            // Update quota displays
+            updateQuotaDisplay('gemini3', quotas.gemini_3_flash);
+            updateQuotaDisplay('gemini25_1', quotas.gemini_2_5_flash_1);
+            updateQuotaDisplay('gemini25_2', quotas.gemini_2_5_flash_2);
+            updateQuotaDisplay('groq', quotas.groq);
+        }
+    } catch (error) {
+        console.error('Failed to load quota information:', error);
+    }
+}
+
+// Update quota display for a specific key
+function updateQuotaDisplay(keyId, quotaInfo) {
+    const quotaDiv = document.getElementById(`${keyId}Quota`);
+    const quotaFill = document.getElementById(`${keyId}QuotaFill`);
+    const quotaText = document.getElementById(`${keyId}QuotaText`);
+    
+    if (!quotaInfo || !quotaInfo.has_key) {
+        quotaDiv.style.display = 'none';
+        return;
+    }
+    
+    quotaDiv.style.display = 'block';
+    
+    const used = quotaInfo.used || 0;
+    const limit = quotaInfo.limit || 0;
+    const percentage = limit > 0 ? (used / limit) * 100 : 0;
+    
+    // Update progress bar
+    quotaFill.style.width = `${Math.min(percentage, 100)}%`;
+    
+    // Update color based on usage
+    quotaFill.classList.remove('warning', 'danger');
+    quotaText.classList.remove('warning', 'danger');
+    
+    if (percentage >= 90) {
+        quotaFill.classList.add('danger');
+        quotaText.classList.add('danger');
+    } else if (percentage >= 70) {
+        quotaFill.classList.add('warning');
+        quotaText.classList.add('warning');
+    }
+    
+    // Update text
+    if (limit === 0) {
+        quotaText.textContent = 'Unlimited';
+    } else {
+        quotaText.textContent = `${used}/${limit} requests used today`;
+        
+        if (percentage >= 100) {
+            quotaText.textContent += ' - LIMIT REACHED!';
+        } else if (percentage >= 90) {
+            quotaText.textContent += ' - Almost full!';
+        }
+    }
+}
+
 
 // Close API Key Modal
 function closeApiKeyModal() {
@@ -2334,6 +2467,18 @@ function toggleKeyVisibility(inputId) {
         input.type = 'password';
         icon.classList.remove('fa-eye-slash');
         icon.classList.add('fa-eye');
+    }
+}
+
+// Open external link in browser
+function openExternalLink(url) {
+    if (typeof require !== 'undefined') {
+        // Electron environment
+        const { shell } = require('electron');
+        shell.openExternal(url);
+    } else {
+        // Web browser fallback
+        window.open(url, '_blank');
     }
 }
 
@@ -2414,7 +2559,7 @@ async function saveApiKeys() {
                 }
             });
             
-            showNotification('API keys saved and tested successfully!', 'success');
+            showNotification('API keys saved successfully!', 'success');
             closeApiKeyModal();
             
             // Reload to apply new keys
@@ -2426,7 +2571,16 @@ async function saveApiKeys() {
         }
     } catch (error) {
         console.error('Failed to save API keys:', error);
-        showNotification('Failed to save API keys. Check console for details.', 'error');
+        
+        // Backend not available - save to localStorage only
+        Object.keys(keys).forEach(key => {
+            if (keys[key]) {
+                localStorage.setItem(key, keys[key]);
+            }
+        });
+        
+        showNotification('Backend not connected. Keys saved locally. Please start the backend server.', 'warning');
+        closeApiKeyModal();
     }
 }
 
@@ -2442,6 +2596,127 @@ window.addEventListener('click', (e) => {
 window.showApiKeyModal = showApiKeyModal;
 window.closeApiKeyModal = closeApiKeyModal;
 window.toggleKeyVisibility = toggleKeyVisibility;
+window.openExternalLink = openExternalLink;
 window.saveApiKeys = saveApiKeys;
+window.checkAllQuotas = checkAllQuotas;
 
 console.log('[GLOBAL] API key management functions exposed');
+
+
+// Check all quotas and show status alerts
+async function checkAllQuotas() {
+    try {
+        const response = await axios.get(`${API_URL}/api-quota-status`);
+        
+        if (response.data.status === 'success') {
+            const quotas = response.data.quotas;
+            
+            // Remove existing alerts
+            const existingAlerts = document.querySelectorAll('.quota-alert');
+            existingAlerts.forEach(alert => alert.remove());
+            
+            // Create alerts container
+            const modalBody = document.querySelector('.api-key-modal .modal-body');
+            const alertsContainer = document.createElement('div');
+            alertsContainer.id = 'quotaAlerts';
+            
+            let hasOverLimit = false;
+            let hasWarning = false;
+            let allGood = true;
+            
+            // Check each quota
+            const quotaChecks = [
+                { id: 'gemini_3_flash', name: 'Gemini 3.0 Flash', data: quotas.gemini_3_flash },
+                { id: 'gemini_2_5_flash_1', name: 'Gemini 2.5 Flash #1', data: quotas.gemini_2_5_flash_1 },
+                { id: 'gemini_2_5_flash_2', name: 'Gemini 2.5 Flash #2', data: quotas.gemini_2_5_flash_2 },
+                { id: 'groq', name: 'Groq API', data: quotas.groq }
+            ];
+            
+            quotaChecks.forEach(check => {
+                if (!check.data.has_key) return; // Skip if no key configured
+                
+                const used = check.data.used;
+                const limit = check.data.limit;
+                
+                if (limit === 0) {
+                    // Unlimited
+                    return;
+                }
+                
+                const percentage = (used / limit) * 100;
+                let alertDiv;
+                
+                if (percentage >= 100) {
+                    // Over limit
+                    hasOverLimit = true;
+                    allGood = false;
+                    alertDiv = document.createElement('div');
+                    alertDiv.className = 'quota-alert danger';
+                    alertDiv.innerHTML = `
+                        <i class="fas fa-exclamation-circle"></i>
+                        <div>
+                            <strong>${check.name}</strong>: Quota exhausted! 
+                            (${used}/${limit} used)
+                            <br><small>Switch to another key or wait for daily reset</small>
+                        </div>
+                    `;
+                } else if (percentage >= 80) {
+                    // Warning
+                    hasWarning = true;
+                    allGood = false;
+                    alertDiv = document.createElement('div');
+                    alertDiv.className = 'quota-alert warning';
+                    alertDiv.innerHTML = `
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <div>
+                            <strong>${check.name}</strong>: ${Math.round(percentage)}% used 
+                            (${used}/${limit})
+                            <br><small>${limit - used} requests remaining</small>
+                        </div>
+                    `;
+                }
+                
+                if (alertDiv) {
+                    alertsContainer.appendChild(alertDiv);
+                }
+            });
+            
+            // Show summary alert
+            if (allGood) {
+                const successAlert = document.createElement('div');
+                successAlert.className = 'quota-alert success';
+                successAlert.innerHTML = `
+                    <i class="fas fa-check-circle"></i>
+                    <div>
+                        <strong>All quotas are healthy!</strong>
+                        <br><small>You have sufficient API requests available</small>
+                    </div>
+                `;
+                alertsContainer.appendChild(successAlert);
+            }
+            
+            // Insert alerts at top of modal body
+            modalBody.insertBefore(alertsContainer, modalBody.firstChild);
+            
+            // Show notification
+            if (hasOverLimit) {
+                showNotification('Some API keys have reached their quota limit!', 'error');
+            } else if (hasWarning) {
+                showNotification('Some API keys are running low on quota', 'warning');
+            } else {
+                showNotification('All API quotas are healthy', 'success');
+            }
+            
+            // Refresh quota displays
+            loadApiQuotas();
+        }
+    } catch (error) {
+        console.error('Failed to check quotas:', error);
+        showNotification('Backend not connected. Cannot check quota status. Please start the backend server.', 'warning');
+    }
+}
+
+// Make function globally available
+window.checkAllQuotas = checkAllQuotas;
+
+console.log('[GLOBAL] Quota check function exposed');

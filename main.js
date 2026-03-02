@@ -19,12 +19,72 @@ function getBackendPath() {
             cwd: path.join(__dirname, 'backend')
         };
     } else {
-        // Production: use bundled executable
-        const exePath = path.join(process.resourcesPath, 'backend', 'api_server.exe');
+        // Production: backend is in extraResources
+        let backendPath;
+        let backendCwd;
+        
+        // Primary location: extraResources (recommended by electron-builder)
+        const extraResourcesPath = path.join(process.resourcesPath, 'backend', 'dist', 'api_server.exe');
+        
+        // Fallback locations
+        const possiblePaths = [
+            extraResourcesPath,
+            path.join(process.resourcesPath, 'app.asar.unpacked', 'backend', 'dist', 'api_server.exe'),
+            path.join(__dirname, 'backend', 'dist', 'api_server.exe'),
+            path.join(__dirname, '..', 'backend', 'dist', 'api_server.exe'),
+        ];
+        
+        console.log('[BACKEND] ========================================');
+        console.log('[BACKEND] Searching for backend executable...');
+        console.log('[BACKEND] __dirname:', __dirname);
+        console.log('[BACKEND] process.resourcesPath:', process.resourcesPath);
+        console.log('[BACKEND] ========================================');
+        
+        for (const testPath of possiblePaths) {
+            console.log('[BACKEND] Trying:', testPath);
+            if (fs.existsSync(testPath)) {
+                backendPath = testPath;
+                backendCwd = path.dirname(testPath);
+                console.log('[BACKEND] ✓ Found at:', backendPath);
+                console.log('[BACKEND] Working directory:', backendCwd);
+                break;
+            } else {
+                console.log('[BACKEND] ✗ Not found');
+            }
+        }
+        
+        if (!backendPath) {
+            console.error('[BACKEND] ========================================');
+            console.error('[BACKEND] ERROR: Backend executable not found!');
+            console.error('[BACKEND] ========================================');
+            console.error('[BACKEND] Searched in:');
+            possiblePaths.forEach(p => console.error('[BACKEND]   -', p));
+            
+            // List what's actually in resources
+            try {
+                console.log('[BACKEND] ========================================');
+                console.log('[BACKEND] Listing actual directory contents:');
+                console.log('[BACKEND] Resources folder:', fs.readdirSync(process.resourcesPath));
+                
+                const backendDir = path.join(process.resourcesPath, 'backend');
+                if (fs.existsSync(backendDir)) {
+                    console.log('[BACKEND] Backend folder:', fs.readdirSync(backendDir));
+                    
+                    const distDir = path.join(backendDir, 'dist');
+                    if (fs.existsSync(distDir)) {
+                        console.log('[BACKEND] Dist folder:', fs.readdirSync(distDir));
+                    }
+                }
+                console.log('[BACKEND] ========================================');
+            } catch (e) {
+                console.error('[BACKEND] Could not list directories:', e.message);
+            }
+        }
+        
         return {
-            command: exePath,
+            command: backendPath,
             args: [],
-            cwd: path.join(process.resourcesPath, 'backend')
+            cwd: backendCwd
         };
     }
 }
@@ -32,43 +92,67 @@ function getBackendPath() {
 function startPythonBackend() {
     const backend = getBackendPath();
     
+    console.log('[BACKEND] ========================================');
     console.log('[BACKEND] Starting Python backend...');
     console.log('[BACKEND] Command:', backend.command);
     console.log('[BACKEND] Args:', backend.args);
     console.log('[BACKEND] CWD:', backend.cwd);
+    console.log('[BACKEND] ========================================');
+    
+    // Check if backend file exists
+    if (!isDev && !fs.existsSync(backend.command)) {
+        console.error('[BACKEND] ERROR: Backend executable not found!');
+        console.error('[BACKEND] Expected location:', backend.command);
+        console.error('[BACKEND] Please ensure api_server.exe is in the backend/dist folder');
+        return;
+    }
     
     try {
         pythonProcess = spawn(backend.command, backend.args, {
             cwd: backend.cwd,
-            env: { ...process.env }
+            env: { ...process.env },
+            stdio: ['ignore', 'pipe', 'pipe']
         });
+        
+        console.log('[BACKEND] Process spawned with PID:', pythonProcess.pid);
         
         pythonProcess.stdout.on('data', (data) => {
             const output = data.toString();
-            console.log(`[BACKEND] ${output}`);
+            console.log(`[BACKEND STDOUT] ${output}`);
             
             // Check if backend is ready
             if (output.includes('Running on')) {
                 backendReady = true;
-                console.log('[BACKEND] Backend is ready!');
+                console.log('[BACKEND] ✓ Backend is ready!');
             }
         });
         
         pythonProcess.stderr.on('data', (data) => {
-            console.error(`[BACKEND ERROR] ${data}`);
+            const error = data.toString();
+            console.error(`[BACKEND STDERR] ${error}`);
         });
         
         pythonProcess.on('close', (code) => {
             console.log(`[BACKEND] Process exited with code ${code}`);
             backendReady = false;
+            
+            if (code !== 0) {
+                console.error('[BACKEND] Backend crashed! Check logs above for errors.');
+            }
         });
         
         pythonProcess.on('error', (err) => {
-            console.error('[BACKEND] Failed to start:', err);
+            console.error('[BACKEND] Failed to start backend process:');
+            console.error('[BACKEND] Error:', err.message);
+            console.error('[BACKEND] Code:', err.code);
+            
+            if (err.code === 'ENOENT') {
+                console.error('[BACKEND] Backend executable not found at:', backend.command);
+            }
         });
         
     } catch (error) {
-        console.error('[BACKEND] Error starting backend:', error);
+        console.error('[BACKEND] Exception while starting backend:', error);
     }
 }
 
@@ -78,7 +162,7 @@ function createWindow() {
         height: 900,
         minWidth: 1200,
         minHeight: 700,
-        icon: path.join(__dirname, 'assets', 'icon.png'),
+        icon: path.join(__dirname, 'assets', 'logo.png'),
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,
