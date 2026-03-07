@@ -50,13 +50,19 @@ def call_with_timeout(func, args=(), kwargs=None, timeout=30):
 
 class MultiLLMService:
     def __init__(self, openrouter_key, gemini_key, gemini_key_fallback=None):
-        """Initialize both DeepSeek (via OpenRouter) and Gemini with fallback support"""
+        """Initialize Gemini (and optionally OpenRouter) with fallback support"""
         
-        # OpenRouter for DeepSeek
-        self.openrouter_client = OpenAI(
-            api_key=openrouter_key,
-            base_url="https://openrouter.ai/api/v1"
-        )
+        # OpenRouter for DeepSeek (optional)
+        self.openrouter_client = None
+        if openrouter_key:
+            try:
+                self.openrouter_client = OpenAI(
+                    api_key=openrouter_key,
+                    base_url="https://openrouter.ai/api/v1"
+                )
+                print("[OK] OpenRouter client initialized")
+            except Exception as e:
+                print(f"[WARNING] OpenRouter initialization failed: {e}")
         
         # Gemini - Use Gemini 3 Flash (latest) with fallback support
         self.gemini_key = gemini_key

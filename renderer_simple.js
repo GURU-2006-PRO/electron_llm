@@ -2313,12 +2313,14 @@ async function loadCurrentApiKeys() {
                 const keys = response.data.keys;
                 
                 // Populate input fields with current keys
+                document.getElementById('openrouterKey').value = keys.OPENROUTER_API_KEY || '';
                 document.getElementById('gemini3Key').value = keys.GEMINI_API_KEY_3_FLASH || '';
                 document.getElementById('gemini25_1Key').value = keys.GEMINI_API_KEY_2_5_FLASH_1 || '';
                 document.getElementById('gemini25_2Key').value = keys.GEMINI_API_KEY_2_5_FLASH_2 || '';
                 document.getElementById('groqKey').value = keys.GROQ_API_KEY || '';
                 
                 // Update status indicators based on whether keys exist
+                updateKeyStatus('openrouterStatus', keys.OPENROUTER_API_KEY);
                 updateKeyStatus('gemini3Status', keys.GEMINI_API_KEY_3_FLASH);
                 updateKeyStatus('gemini25_1Status', keys.GEMINI_API_KEY_2_5_FLASH_1);
                 updateKeyStatus('gemini25_2Status', keys.GEMINI_API_KEY_2_5_FLASH_2);
@@ -2351,11 +2353,13 @@ async function loadCurrentApiKeys() {
     if (backendBanner) backendBanner.style.display = 'flex';
     
     // Backend not available - load from localStorage as fallback
+    const openrouter = localStorage.getItem('OPENROUTER_API_KEY') || '';
     const gemini3 = localStorage.getItem('GEMINI_API_KEY_3_FLASH') || '';
     const gemini25_1 = localStorage.getItem('GEMINI_API_KEY_2_5_FLASH_1') || '';
     const gemini25_2 = localStorage.getItem('GEMINI_API_KEY_2_5_FLASH_2') || '';
     const groq = localStorage.getItem('GROQ_API_KEY') || '';
     
+    document.getElementById('openrouterKey').value = openrouter;
     document.getElementById('gemini3Key').value = gemini3;
     document.getElementById('gemini25_1Key').value = gemini25_1;
     document.getElementById('gemini25_2Key').value = gemini25_2;
@@ -2535,6 +2539,7 @@ async function checkApiKey(keyType, apiKey, statusElementId) {
 // Save API keys
 async function saveApiKeys() {
     const keys = {
+        OPENROUTER_API_KEY: document.getElementById('openrouterKey').value,
         GEMINI_API_KEY_3_FLASH: document.getElementById('gemini3Key').value,
         GEMINI_API_KEY_2_5_FLASH_1: document.getElementById('gemini25_1Key').value,
         GEMINI_API_KEY_2_5_FLASH_2: document.getElementById('gemini25_2Key').value,
@@ -2542,8 +2547,8 @@ async function saveApiKeys() {
     };
     
     // Validate at least one key is provided
-    if (!keys.GEMINI_API_KEY_3_FLASH && !keys.GEMINI_API_KEY_2_5_FLASH_1 && !keys.GEMINI_API_KEY_2_5_FLASH_2) {
-        showNotification('Please provide at least one Gemini API key', 'error');
+    if (!keys.GEMINI_API_KEY_3_FLASH && !keys.GEMINI_API_KEY_2_5_FLASH_1 && !keys.GEMINI_API_KEY_2_5_FLASH_2 && !keys.OPENROUTER_API_KEY) {
+        showNotification('Please provide at least one API key (Gemini or OpenRouter)', 'error');
         return;
     }
     

@@ -393,6 +393,30 @@
                 <div class="api-key-section">
                     <label class="api-key-label">
                         <span>
+                            <i class="fas fa-brain"></i>
+                            OpenRouter API (Optional)
+                        </span>
+                        <span class="api-key-status" id="openrouterStatus">
+                            <i class="fas fa-minus-circle"></i> Not set
+                        </span>
+                    </label>
+                    <div class="api-key-input-group">
+                        <input type="password" id="openrouterKey" class="api-key-input" placeholder="sk-or-v1-..." />
+                        <button class="api-key-toggle" onclick="toggleKeyVisibility('openrouterKey')" title="Toggle visibility">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                    <small class="api-key-hint">
+                        <i class="fas fa-info-circle"></i> DeepSeek & other models • Get your key: 
+                        <a href="#" onclick="openExternalLink('https://openrouter.ai/keys'); return false;" class="api-key-link">
+                            openrouter.ai/keys
+                        </a>
+                    </small>
+                </div>
+
+                <div class="api-key-section">
+                    <label class="api-key-label">
+                        <span>
                             <i class="fas fa-bolt"></i>
                             Groq API (Optional)
                         </span>
