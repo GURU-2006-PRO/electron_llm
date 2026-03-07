@@ -10,6 +10,43 @@ import uuid
 import json
 import time
 import re
+import threading
+from queue import Queue, Empty
+
+# Timeout helper function for API calls
+def call_with_timeout(func, args=(), kwargs=None, timeout=30):
+    """
+    Call a function with a timeout. Returns (result, error).
+    If timeout occurs, returns (None, TimeoutError).
+    """
+    if kwargs is None:
+        kwargs = {}
+    
+    result_queue = Queue()
+    
+    def worker():
+        try:
+            result = func(*args, **kwargs)
+            result_queue.put(('success', result))
+        except Exception as e:
+            result_queue.put(('error', e))
+    
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    thread.join(timeout=timeout)
+    
+    if thread.is_alive():
+        # Timeout occurred
+        return None, TimeoutError(f"API call timed out after {timeout} seconds")
+    
+    try:
+        status, value = result_queue.get_nowait()
+        if status == 'success':
+            return value, None
+        else:
+            return None, value
+    except Empty:
+        return None, Exception("Unknown error in API call")
 
 class MultiLLMService:
     def __init__(self, openrouter_key, gemini_key, gemini_key_fallback=None):
@@ -243,7 +280,18 @@ Provide a well-structured response with:
 Format your response clearly with sections."""
 
             try:
-                response = self.gemini_model.generate_content(prompt)
+                # Call Gemini with 30-second timeout
+                result, error = call_with_timeout(
+                    self.gemini_model.generate_content,
+                    args=(prompt,),
+                    timeout=30
+                )
+                
+                if error:
+                    raise error
+                
+                response = result
+                
             except Exception as e:
                 # Try fallback key if primary fails
                 if self.gemini_key_fallback and self.current_gemini_key != self.gemini_key_fallback:
@@ -252,7 +300,18 @@ Format your response clearly with sections."""
                     self.current_gemini_key = self.gemini_key_fallback
                     genai.configure(api_key=self.current_gemini_key)
                     self.gemini_model = genai.GenerativeModel('gemini-3-flash-preview')
-                    response = self.gemini_model.generate_content(prompt)
+                    
+                    # Try fallback with timeout
+                    result, error = call_with_timeout(
+                        self.gemini_model.generate_content,
+                        args=(prompt,),
+                        timeout=30
+                    )
+                    
+                    if error:
+                        raise error
+                    
+                    response = result
                     print(f"[OK] Fallback key successful")
                 else:
                     raise

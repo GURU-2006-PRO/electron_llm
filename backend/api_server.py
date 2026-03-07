@@ -7,6 +7,8 @@ import json
 import time
 from datetime import datetime
 from dotenv import load_dotenv
+import threading
+from queue import Queue, Empty
 
 # Load environment variables from .env file
 load_dotenv()
@@ -36,6 +38,41 @@ def make_json_serializable(obj):
         return obj.to_dict('records')
     else:
         return obj
+
+# Timeout helper function for API calls
+def call_with_timeout(func, args=(), kwargs=None, timeout=30):
+    """
+    Call a function with a timeout. Returns (result, error).
+    If timeout occurs, returns (None, TimeoutError).
+    """
+    if kwargs is None:
+        kwargs = {}
+    
+    result_queue = Queue()
+    
+    def worker():
+        try:
+            result = func(*args, **kwargs)
+            result_queue.put(('success', result))
+        except Exception as e:
+            result_queue.put(('error', e))
+    
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    thread.join(timeout=timeout)
+    
+    if thread.is_alive():
+        # Timeout occurred
+        return None, TimeoutError(f"API call timed out after {timeout} seconds")
+    
+    try:
+        status, value = result_queue.get_nowait()
+        if status == 'success':
+            return value, None
+        else:
+            return None, value
+    except Empty:
+        return None, Exception("Unknown error in API call")
 
 # Try to import Multi-LLM service
 try:
@@ -420,44 +457,66 @@ Generate the query specification JSON."""
         
         raw_query = None
         
-        # Try Gemini first, fallback to OpenRouter
+        # Use Gemini API only
         try:
-            print("[INFO] Trying Gemini API for query generation")
-            query_resp = llm_service.gemini_model.generate_content(query_prompt)
-            raw_query = query_resp.text
+            print("[INFO] Calling Gemini API for query generation")
+            
+            # Call Gemini with 30-second timeout
+            result, error = call_with_timeout(
+                llm_service.gemini_model.generate_content,
+                args=(query_prompt,),
+                timeout=30
+            )
+            
+            if error:
+                error_msg = str(error)
+                print(f"[ERROR] Gemini API failed: {error_msg}")
+                
+                # Check for specific error types
+                if "403" in error_msg or "leaked" in error_msg.lower():
+                    return jsonify({
+                        "status": "error",
+                        "error": "Gemini API key was reported as leaked. Please generate a NEW API key at https://aistudio.google.com/app/apikey and update it in Settings."
+                    })
+                elif "timeout" in error_msg.lower():
+                    return jsonify({
+                        "status": "error",
+                        "error": "Gemini API request timed out. Please check your internet connection and try again."
+                    })
+                elif "429" in error_msg or "quota" in error_msg.lower():
+                    return jsonify({
+                        "status": "error",
+                        "error": "Gemini API quota exceeded. Please wait or use a different API key."
+                    })
+                else:
+                    return jsonify({
+                        "status": "error",
+                        "error": f"Gemini API error: {error_msg}"
+                    })
+            
+            raw_query = result.text
             track_api_usage('gemini_3_flash')
             print("[SUCCESS] Gemini API worked")
             
         except Exception as gemini_error:
-            print(f"[WARNING] Gemini API failed: {gemini_error}")
-            print("[INFO] Falling back to OpenRouter/DeepSeek for query generation")
+            error_msg = str(gemini_error)
+            print(f"[ERROR] Gemini API exception: {error_msg}")
             
-            try:
-                # Use OpenRouter as fallback
-                import openai
-                openrouter_key = os.getenv('OPENROUTER_API_KEY')
-                
-                if not openrouter_key:
-                    raise Exception("OpenRouter API key not found")
-                
-                client = openai.OpenAI(
-                    base_url="https://openrouter.ai/api/v1",
-                    api_key=openrouter_key
-                )
-                
-                response = client.chat.completions.create(
-                    model="deepseek/deepseek-chat",
-                    messages=[{"role": "user", "content": query_prompt}]
-                )
-                
-                raw_query = response.choices[0].message.content
-                print("[SUCCESS] OpenRouter/DeepSeek worked for query generation")
-                
-            except Exception as openrouter_error:
-                print(f"[ERROR] OpenRouter also failed: {openrouter_error}")
+            # Check for specific error types
+            if "403" in error_msg or "leaked" in error_msg.lower():
                 return jsonify({
                     "status": "error",
-                    "error": f"Both Gemini and OpenRouter failed. Gemini: {str(gemini_error)}, OpenRouter: {str(openrouter_error)}"
+                    "error": "Gemini API key was reported as leaked. Please generate a NEW API key at https://aistudio.google.com/app/apikey and update it in Settings."
+                })
+            elif "429" in error_msg or "quota" in error_msg.lower():
+                return jsonify({
+                    "status": "error",
+                    "error": "Gemini API quota exceeded. Please wait or use a different API key."
+                })
+            else:
+                return jsonify({
+                    "status": "error",
+                    "error": f"Gemini API error: {error_msg}"
                 })
         
         if not raw_query:
@@ -590,8 +649,17 @@ Now analyze this result and generate the structured insight JSON.
 Return ONLY valid JSON, no markdown, no extra text."""
             
             try:
-                gemini_response = gemini_model.generate_content(prompt)
-                raw_insight = gemini_response.text
+                # Call Gemini with 30-second timeout
+                result, error = call_with_timeout(
+                    gemini_model.generate_content,
+                    args=(prompt,),
+                    timeout=30
+                )
+                
+                if error:
+                    raise error
+                
+                raw_insight = result.text
                 
                 # Track API usage in database
                 if insight_model == 'gemini-3-flash':

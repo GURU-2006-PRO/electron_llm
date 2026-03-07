@@ -275,6 +275,25 @@ class ChatDatabase:
         stats['last_query_time'] = row['timestamp'] if row else None
         
         return stats
+    def get_quota_usage(self, model_name: str, date: str) -> Dict:
+        """Get API quota usage for a specific model and date"""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                SELECT COUNT(*) as used
+                FROM chat_history
+                WHERE model = ? AND DATE(timestamp) = ?
+            ''', (model_name, date))
+
+            result = cursor.fetchone()
+            return {
+                'used': result['used'] if result else 0,
+                'date': date,
+                'model': model_name
+            }
+        except Exception as e:
+            print(f"[ERROR] Failed to get quota usage: {e}")
+            return {'used': 0, 'date': date, 'model': model_name}
     
     def export_history(self, filepath: str = 'chat_history_export.json'):
         """

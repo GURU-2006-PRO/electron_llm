@@ -5,6 +5,11 @@ win-unpacked/
 *.exe 
 *.msi 
 
+# Environment variables - NEVER commit API keys!
+.env
+backend/.env
+*.env
+
 # Python
 __pycache__/
 *.py[cod]
