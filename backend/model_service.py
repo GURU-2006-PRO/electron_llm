@@ -49,8 +49,8 @@ def call_with_timeout(func, args=(), kwargs=None, timeout=30):
         return None, Exception("Unknown error in API call")
 
 class MultiLLMService:
-    def __init__(self, openrouter_key, gemini_key, gemini_key_fallback=None):
-        """Initialize Gemini (and optionally OpenRouter) with fallback support"""
+    def __init__(self, openrouter_key, gemini_key, gemini_key_fallback=None, groq_key=None):
+        """Initialize Gemini, OpenRouter, and Groq with fallback support"""
         
         # OpenRouter for DeepSeek (optional)
         self.openrouter_client = None
@@ -64,10 +64,29 @@ class MultiLLMService:
             except Exception as e:
                 print(f"[WARNING] OpenRouter initialization failed: {e}")
         
+        # Groq for fast inference (optional)
+        self.groq_client = None
+        if groq_key:
+            try:
+                self.groq_client = OpenAI(
+                    api_key=groq_key,
+                    base_url="https://api.groq.com/openai/v1"
+                )
+                print("[OK] Groq client initialized")
+            except Exception as e:
+                print(f"[WARNING] Groq initialization failed: {e}")
+        
         # Gemini - Use Gemini 3 Flash (latest) with fallback support
         self.gemini_key = gemini_key
         self.gemini_key_fallback = gemini_key_fallback
         self.current_gemini_key = gemini_key
+        self.gemini_model = None
+        
+        # Only initialize if key is provided
+        if not gemini_key or gemini_key == '':
+            print("[WARNING] No Gemini API key provided - Gemini features disabled")
+            print("[INFO] Add API key via Settings to enable Gemini")
+            return
         
         try:
             genai.configure(api_key=self.current_gemini_key)
@@ -84,13 +103,16 @@ class MultiLLMService:
                     print(f"[OK] Gemini initialized with fallback key")
                 except Exception as e2:
                     print(f"[ERROR] Fallback Gemini key also failed: {e2}")
-                    raise
+                    self.gemini_model = None
         
         # Available models
         self.MODELS = {
             "deepseek-chat": "deepseek/deepseek-chat",
             "deepseek-r1": "deepseek/deepseek-r1",
-            "gemini-flash": "gemini-3-flash-preview"
+            "gemini-flash": "gemini-3-flash-preview",
+            "groq-llama-70b": "llama-3.3-70b-versatile",
+            "groq-llama-8b": "llama-3.1-8b-instant",
+            "groq-mixtral": "openai/gpt-oss-120b"
         }
         
         # Job storage for async processing
@@ -253,6 +275,9 @@ class MultiLLMService:
             elif model == "deepseek-chat":
                 print(f"[INFO] Routing to DeepSeek Chat")
                 return self._query_deepseek_chat(user_query, data_context)
+            elif model in ["groq-llama-70b", "groq-llama-8b", "groq-mixtral"]:
+                print(f"[INFO] Routing to Groq: {model}")
+                return self._query_groq(user_query, data_context, model)
             else:
                 # Generic OpenRouter model
                 print(f"[INFO] Routing to OpenRouter: {model}")
@@ -270,6 +295,10 @@ class MultiLLMService:
         try:
             print(f"[INFO] Calling Gemini 3 Flash Preview API...")
             start_time = time.time()
+            
+            # CRITICAL: Reconfigure genai before EVERY API call
+            # The genai module loses its configuration between calls
+            genai.configure(api_key=self.current_gemini_key)
             
             prompt = f"""You are a data analyst. Analyze this transaction data and provide insights.
 
@@ -407,6 +436,73 @@ Format your response with:
             return {
                 "error": str(e),
                 "model": "deepseek-chat",
+                "type": "error"
+            }
+    
+    def _query_groq(self, query, context, model):
+        """Query Groq models (ultra-fast inference)"""
+        if not self.groq_client:
+            return {
+                "error": "Groq API key not configured. Please add it in Settings.",
+                "model": model,
+                "type": "error"
+            }
+        
+        try:
+            start_time = time.time()
+            
+            # Get the actual model name from MODELS dict
+            groq_model_name = self.MODELS.get(model, "llama-3.1-70b-versatile")
+            
+            response = self.groq_client.chat.completions.create(
+                model=groq_model_name,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": f"""You are a data analyst. Provide clear, structured responses.
+
+Data Context:
+{context}
+
+Format your response with:
+- Direct answer first
+- Key insights as bullet points
+- Use numbers and statistics
+- Be concise but informative"""
+                    },
+                    {
+                        "role": "user",
+                        "content": query
+                    }
+                ],
+                max_tokens=1000,
+                temperature=0.7
+            )
+            
+            elapsed = time.time() - start_time
+            answer = response.choices[0].message.content
+            
+            # Format response
+            formatted = self._format_response(answer)
+            
+            result = {
+                "answer": formatted,
+                "model": model,
+                "type": "complete",
+                "response_time": f"{elapsed:.2f}s",
+                "from_cache": False
+            }
+            
+            # Cache it
+            cache_key = f"{model}:{query}:{context[:100]}"
+            self.cache[cache_key] = result
+            
+            return result
+            
+        except Exception as e:
+            return {
+                "error": str(e),
+                "model": model,
                 "type": "error"
             }
     
@@ -623,25 +719,48 @@ Format your response with:
     
     def get_available_models(self):
         """Get list of available models"""
-        return {
-            "models": [
+        models = [
+            {
+                "id": "deepseek-chat",
+                "name": "DeepSeek Chat",
+                "description": "Fast responses (1-2s)",
+                "best_for": "Quick queries, simple analysis"
+            },
+            {
+                "id": "deepseek-r1",
+                "name": "DeepSeek R1",
+                "description": "Deep reasoning (10-30s)",
+                "best_for": "Complex analysis, insights, recommendations"
+            },
+            {
+                "id": "gemini-flash",
+                "name": "Google Gemini 3.0 Flash",
+                "description": "Fast & balanced (2-5s)",
+                "best_for": "General analysis, varied queries"
+            }
+        ]
+        
+        # Add Groq models if client is available
+        if self.groq_client:
+            models.extend([
                 {
-                    "id": "deepseek-chat",
-                    "name": "DeepSeek Chat",
-                    "description": "Fast responses (1-2s)",
-                    "best_for": "Quick queries, simple analysis"
+                    "id": "groq-llama-70b",
+                    "name": "Llama 3.3 70B (Groq)",
+                    "description": "Ultra-fast inference (<1s)",
+                    "best_for": "Quick analysis, real-time responses"
                 },
                 {
-                    "id": "deepseek-r1",
-                    "name": "DeepSeek R1",
-                    "description": "Deep reasoning (10-30s)",
-                    "best_for": "Complex analysis, insights, recommendations"
+                    "id": "groq-llama-8b",
+                    "name": "Llama 3.1 8B (Groq)",
+                    "description": "Lightning fast (<0.5s)",
+                    "best_for": "Simple queries, instant responses"
                 },
                 {
-                    "id": "gemini-flash",
-                    "name": "Google Gemini 3.0 Flash",
-                    "description": "Fast & balanced (2-5s)",
-                    "best_for": "General analysis, varied queries"
+                    "id": "groq-mixtral",
+                    "name": "GPT-OSS 120B (Groq)",
+                    "description": "Powerful reasoning (1-2s)",
+                    "best_for": "Complex analysis, high quality"
                 }
-            ]
-        }
+            ])
+        
+        return {"models": models}

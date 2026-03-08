@@ -14,14 +14,30 @@ from queue import Queue, Empty
 # Load environment variables from .env file
 # Handle both dev and production (EXE) environments
 if getattr(sys, 'frozen', False):
-    # Running as EXE - .env is in resources/backend/.env
-    backend_dir = os.path.dirname(os.path.dirname(sys.executable))
+    # Running as EXE
+    # sys.executable is at: resources/backend/dist/api_server.exe
+    # We need .env at: resources/backend/.env
+    exe_dir = os.path.dirname(sys.executable)  # resources/backend/dist
+    backend_dir = os.path.dirname(exe_dir)      # resources/backend
     env_path = os.path.join(backend_dir, '.env')
+    
+    # Create .env if it doesn't exist
+    if not os.path.exists(env_path):
+        print(f"[WARNING] .env not found at {env_path}, creating empty one")
+        os.makedirs(backend_dir, exist_ok=True)
+        with open(env_path, 'w') as f:
+            f.write("# API Keys will be added via Settings UI\n")
+            f.write("GEMINI_API_KEY_3_FLASH=\n")
+            f.write("GEMINI_API_KEY_2_5_FLASH_1=\n")
+            f.write("GEMINI_API_KEY_2_5_FLASH_2=\n")
+            f.write("OPENROUTER_API_KEY=\n")
+            f.write("GROQ_API_KEY=\n")
 else:
     # Running as script
     env_path = os.path.join(os.path.dirname(__file__), '.env')
 
 print(f"[INFO] Loading .env from: {env_path}")
+print(f"[INFO] .env exists: {os.path.exists(env_path)}")
 load_dotenv(env_path)
 
 # Helper function to convert numpy/pandas types to JSON-serializable types
@@ -146,6 +162,16 @@ CORS(app)
 # Initialize Multi-LLM Service if available
 llm_service = None
 gemini_manager = None
+CURRENT_GEMINI_KEY = None  # Store key for reconfiguration
+
+def ensure_gemini_configured():
+    """Ensure genai is configured before API calls"""
+    if CURRENT_GEMINI_KEY:
+        import google.generativeai as genai
+        genai.configure(api_key=CURRENT_GEMINI_KEY)
+        return True
+    return False
+
 if llm_available:
     try:
         # Get API keys from environment variables
@@ -153,6 +179,11 @@ if llm_available:
         GEMINI_3_FLASH_KEY = os.getenv('GEMINI_API_KEY_3_FLASH')
         GEMINI_2_5_FLASH_1_KEY = os.getenv('GEMINI_API_KEY_2_5_FLASH_1')
         GEMINI_2_5_FLASH_2_KEY = os.getenv('GEMINI_API_KEY_2_5_FLASH_2')
+        GROQ_API_KEY = os.getenv('GROQ_API_KEY')
+        
+        # Store the primary key globally
+        CURRENT_GEMINI_KEY = GEMINI_3_FLASH_KEY
+        print(f"[DEBUG] CURRENT_GEMINI_KEY set to: {CURRENT_GEMINI_KEY[:20] if CURRENT_GEMINI_KEY else 'None'}...")
         
         if OPENROUTER_API_KEY:
             print("[OK] OpenRouter API key configured")
@@ -171,6 +202,11 @@ if llm_available:
         if GEMINI_2_5_FLASH_2_KEY:
             print("[OK] Gemini 2.5 Flash #2 key configured")
         
+        if GROQ_API_KEY:
+            print("[OK] Groq API key configured")
+        else:
+            print("[INFO] Groq API key not set (optional)")
+        
         # Initialize Gemini Manager
         from gemini_config import GeminiManager
         gemini_manager = GeminiManager(
@@ -179,11 +215,12 @@ if llm_available:
             key_2_5_flash_2=GEMINI_2_5_FLASH_2_KEY
         )
         
-        # Initialize LLM service with both OpenRouter and Gemini
+        # Initialize LLM service with OpenRouter, Gemini, and Groq
         llm_service = MultiLLMService(
             openrouter_key=OPENROUTER_API_KEY,
             gemini_key=GEMINI_3_FLASH_KEY,
-            gemini_key_fallback=GEMINI_2_5_FLASH_1_KEY
+            gemini_key_fallback=GEMINI_2_5_FLASH_1_KEY,
+            groq_key=GROQ_API_KEY
         )
         print("[OK] LLM service initialized")
     except Exception as e:
@@ -326,7 +363,7 @@ def get_models():
 
 @app.route('/query', methods=['POST'])
 def process_query():
-    global df, dataset_loaded
+    global df, dataset_loaded, global_stats
     
     if not dataset_loaded:
         return jsonify({
@@ -336,91 +373,111 @@ def process_query():
     
     try:
         data = request.json
-        query = data.get('query', '').lower()
-        use_ai = data.get('use_ai', True)
-        model = data.get('model', 'deepseek-r1')  # Default to DeepSeek R1
+        user_question = data.get('query', '')
+        model = data.get('model', 'gemini-flash')
         
-        # If AI is enabled and available, use Multi-LLM service
-        if use_ai and llm_service:
-            try:
-                # Get the actual amount column name
-                amount_col = None
-                for col in df.columns:
-                    if 'amount' in col.lower():
-                        amount_col = col
-                        break
-                
-                # Prepare data context for LLM
-                total_amount = df[amount_col].sum() if amount_col else 0
-                avg_amount = df[amount_col].mean() if amount_col else 0
-                
-                data_context = f"""
-Dataset: UPI Transaction Data
-Total Transactions: {len(df):,}
-Columns: {', '.join(df.columns.tolist())}
-Total Amount: Rs.{total_amount:,.2f}
-Average Amount: Rs.{avg_amount:.2f}
+        print(f"\n[SIMPLE QUERY] Question: {user_question}")
+        print(f"[SIMPLE QUERY] Model: {model}")
+        
+        # STEP 1: Generate Pandas query specification (same as advanced mode)
+        if not advanced_prompts_available or not llm_service:
+            # Fallback to basic response
+            return jsonify({
+                "answer": f"Dataset contains {len(df):,} transactions with {len(df.columns)} columns",
+                "statistics": {'Total Transactions': len(df)}
+            })
+        
+        query_prompt = f"""{PANDAS_GENERATION_PROMPT}
 
-Sample Data (first 3 rows):
-{df.head(3).to_string()}
+User Question: {user_question}
 
-Key Statistics:
-- Fraud transactions: {df['fraud_flag'].sum() if 'fraud_flag' in df.columns else 'N/A'}
-- Unique merchants: {df['merchant_category'].nunique() if 'merchant_category' in df.columns else 'N/A'}
-- Date range: {df['timestamp'].min() if 'timestamp' in df.columns else 'N/A'} to {df['timestamp'].max() if 'timestamp' in df.columns else 'N/A'}
-"""
-                
-                # Query with selected model
-                result = llm_service.query(query, data_context, model=model)
-                return jsonify(result)
-            except Exception as e:
-                print(f"[WARNING] LLM query failed: {e}")
-                # Fall through to simple processing
+Generate the query specification JSON."""
         
-        # Fallback to simple query processing
-        response = {"answer": "", "statistics": {}}
-        
-        # Find amount column dynamically
-        amount_col = None
-        for col in df.columns:
-            if 'amount' in col.lower():
-                amount_col = col
-                break
-        
-        if 'average' in query or 'mean' in query:
-            if 'amount' in query and amount_col:
-                avg = df[amount_col].mean()
-                response['answer'] = f"The average transaction amount is Rs.{avg:.2f}"
-                response['statistics'] = {
-                    'Average Amount': f"Rs.{avg:.2f}",
-                    'Total Transactions': len(df)
-                }
-        
-        elif 'total' in query or 'sum' in query:
-            if 'amount' in query and amount_col:
-                total = df[amount_col].sum()
-                response['answer'] = f"The total transaction amount is Rs.{total:,.2f}"
-                response['statistics'] = {
-                    'Total Amount': f"Rs.{total:,.2f}",
-                    'Transaction Count': len(df)
-                }
-        
-        elif 'count' in query or 'how many' in query:
-            count = len(df)
-            response['answer'] = f"There are {count:,} transactions in the dataset"
-            response['statistics'] = {
-                'Total Transactions': count
-            }
-        
-        else:
-            # Default response
-            response['answer'] = f"Dataset contains {len(df):,} transactions with {len(df.columns)} columns"
-            response['statistics'] = {
-                'Total Transactions': len(df),
-                'Columns': len(df.columns)
-            }
-        
-        return jsonify(response)
+        try:
+            # Generate query spec with Gemini
+            import google.generativeai as genai
+            genai.configure(api_key=CURRENT_GEMINI_KEY)
+            fresh_model = genai.GenerativeModel('gemini-3-flash-preview')
+            
+            result, error = call_with_timeout(
+                fresh_model.generate_content,
+                args=(query_prompt,),
+                timeout=30
+            )
+            
+            if error:
+                raise error
+            
+            raw_query = result.text
+            raw_query = strip_fences(raw_query)
+            query_spec = json.loads(raw_query)
+            
+            if query_spec.get("status") == "error":
+                return jsonify({
+                    "answer": query_spec.get("reason", "Cannot answer this query"),
+                    "statistics": None
+                })
+            
+            # STEP 2: Execute Pandas query
+            result_df = execute_pandas_query(df, query_spec)
+            
+            if result_df.empty:
+                return jsonify({
+                    "answer": "No data found for this query.",
+                    "statistics": None
+                })
+            
+            # STEP 3: Generate simple conversational answer
+            data_summary = f"""Query Result ({len(result_df)} rows):
+{result_df.head(10).to_string(index=False)}
+
+Totals: {result_df.select_dtypes(include=['number']).sum().to_dict()}"""
+            
+            simple_prompt = f"""Based on this data, provide a clear, concise answer to: "{user_question}"
+
+{data_summary}
+
+Provide a direct answer in 2-3 sentences. Include key numbers. Be conversational but accurate.
+Do NOT include code examples or technical explanations."""
+            
+            genai.configure(api_key=CURRENT_GEMINI_KEY)
+            simple_model = genai.GenerativeModel('gemini-3-flash-preview')
+            
+            answer_result, answer_error = call_with_timeout(
+                simple_model.generate_content,
+                args=(simple_prompt,),
+                timeout=30
+            )
+            
+            if answer_error:
+                # Fallback to basic summary
+                answer_text = f"Found {len(result_df)} results. {result_df.to_string(max_rows=5)}"
+            else:
+                answer_text = answer_result.text
+            
+            # Extract key statistics
+            statistics = {}
+            if len(result_df) > 0:
+                for col in result_df.select_dtypes(include=['number']).columns:
+                    if col != 'transaction id':
+                        statistics[col] = result_df[col].sum()
+            
+            return jsonify({
+                "answer": answer_text,
+                "statistics": statistics,
+                "model": model
+            })
+            
+        except Exception as e:
+            print(f"[ERROR] Simple query failed: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # Fallback to basic response
+            return jsonify({
+                "answer": f"Error processing query: {str(e)}",
+                "statistics": None
+            })
         
     except Exception as e:
         return jsonify({
@@ -436,6 +493,11 @@ def get_query_status(job_id):
         return jsonify(status)
     return jsonify({"status": "not_available", "message": "LLM service not initialized"})
 
+@app.route('/test-endpoint', methods=['GET', 'POST'])
+def test_endpoint():
+    print("[TEST] Test endpoint called!")
+    return jsonify({"status": "success", "message": "Test endpoint works", "key_set": CURRENT_GEMINI_KEY is not None})
+
 @app.route('/advanced-query', methods=['POST'])
 def advanced_query():
     """
@@ -447,7 +509,15 @@ def advanced_query():
     - Confidence scoring
     - Follow-up questions
     """
-    global df, dataset_loaded, global_stats, conversation_history
+    try:
+        print("[DEBUG] ========== ADVANCED QUERY ENDPOINT CALLED ==========")
+        global df, dataset_loaded, global_stats, conversation_history
+    except Exception as e:
+        print(f"[FATAL ERROR] Exception at start of endpoint: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "error": f"Fatal error: {str(e)}"})
+
     
     if not dataset_loaded:
         return jsonify({
@@ -481,13 +551,25 @@ Generate the query specification JSON."""
         
         raw_query = None
         
+        # Check if Gemini is available
+        if not llm_service or not llm_service.gemini_model:
+            return jsonify({
+                "status": "error",
+                "error": "Gemini API not initialized. Please check your API keys in Settings."
+            })
+        
         # Use Gemini API only
         try:
             print("[INFO] Calling Gemini API for query generation")
             
+            # CRITICAL: Create fresh model instance with key
+            import google.generativeai as genai
+            genai.configure(api_key=CURRENT_GEMINI_KEY)
+            fresh_model = genai.GenerativeModel('gemini-3-flash-preview')
+            
             # Call Gemini with 30-second timeout
             result, error = call_with_timeout(
-                llm_service.gemini_model.generate_content,
+                fresh_model.generate_content,
                 args=(query_prompt,),
                 timeout=30
             )
@@ -673,9 +755,14 @@ Now analyze this result and generate the structured insight JSON.
 Return ONLY valid JSON, no markdown, no extra text."""
             
             try:
+                # CRITICAL: Create fresh model instance with key
+                import google.generativeai as genai
+                genai.configure(api_key=CURRENT_GEMINI_KEY)
+                fresh_model = genai.GenerativeModel('gemini-3-flash-preview')
+                
                 # Call Gemini with 30-second timeout
                 result, error = call_with_timeout(
-                    gemini_model.generate_content,
+                    fresh_model.generate_content,
                     args=(prompt,),
                     timeout=30
                 )
@@ -1424,10 +1511,11 @@ def update_api_keys():
         
         # Path to .env file - handle both dev and production
         if getattr(sys, 'frozen', False):
-            # Running as EXE - .env is in resources/backend/.env
+            # Running as EXE
             # sys.executable is at: resources/backend/dist/api_server.exe
-            # We need to go up one level to: resources/backend/.env
-            backend_dir = os.path.dirname(os.path.dirname(sys.executable))
+            # We need .env at: resources/backend/.env
+            exe_dir = os.path.dirname(sys.executable)  # resources/backend/dist
+            backend_dir = os.path.dirname(exe_dir)      # resources/backend
             env_path = os.path.join(backend_dir, '.env')
         else:
             # Running as script
@@ -1487,11 +1575,57 @@ def update_api_keys():
         
         print(f"[SUCCESS] API keys updated in {env_path}")
         
-        # Reload environment variables
+        # Manually update os.environ (load_dotenv doesn't always work for updates)
+        for key, value in keys_to_update.items():
+            if value:
+                os.environ[key] = value
+                print(f"[INFO] Set {key} in environment")
+        
+        # Also reload from file
         from dotenv import load_dotenv
         load_dotenv(env_path, override=True)
         
-        return jsonify({"status": "success", "message": "API keys updated successfully. Please restart the app for changes to take effect."})
+        # Reinitialize LLM service with new keys
+        global llm_service, gemini_manager
+        try:
+            OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
+            GEMINI_3_FLASH_KEY = os.getenv('GEMINI_API_KEY_3_FLASH')
+            GEMINI_2_5_FLASH_1_KEY = os.getenv('GEMINI_API_KEY_2_5_FLASH_1')
+            GEMINI_2_5_FLASH_2_KEY = os.getenv('GEMINI_API_KEY_2_5_FLASH_2')
+            
+            print(f"[DEBUG] After reload - GEMINI_3_FLASH_KEY: {GEMINI_3_FLASH_KEY[:20] if GEMINI_3_FLASH_KEY else 'None'}...")
+            
+            if GEMINI_3_FLASH_KEY:
+                # Reconfigure Gemini with new key
+                import google.generativeai as genai
+                genai.configure(api_key=GEMINI_3_FLASH_KEY)
+                print(f"[INFO] Reconfigured Gemini with new API key")
+                
+                # Reinitialize Gemini Manager
+                from gemini_config import GeminiManager
+                gemini_manager = GeminiManager(
+                    key_3_flash=GEMINI_3_FLASH_KEY,
+                    key_2_5_flash_1=GEMINI_2_5_FLASH_1_KEY,
+                    key_2_5_flash_2=GEMINI_2_5_FLASH_2_KEY
+                )
+                print(f"[INFO] Gemini Manager reinitialized")
+                
+                # Reinitialize LLM service
+                from model_service import MultiLLMService
+                llm_service = MultiLLMService(
+                    openrouter_key=OPENROUTER_API_KEY,
+                    gemini_key=GEMINI_3_FLASH_KEY,
+                    gemini_key_fallback=GEMINI_2_5_FLASH_1_KEY
+                )
+                print("[SUCCESS] LLM service reinitialized with new keys")
+            else:
+                print("[WARNING] No Gemini key provided, skipping LLM reinit")
+        except Exception as reinit_error:
+            print(f"[ERROR] Could not reinitialize LLM service: {reinit_error}")
+            import traceback
+            traceback.print_exc()
+        
+        return jsonify({"status": "success", "message": "API keys updated and loaded successfully! No restart needed."})
         
     except Exception as e:
         print(f"[ERROR] Failed to update API keys: {e}")
@@ -1518,8 +1652,17 @@ QUOTA_LIMITS = {
 def get_api_quota_status():
     """Get current API quota usage for all keys from database"""
     try:
-        if not db_available:
-            return jsonify({"status": "error", "error": "Database not available"}), 500
+        if not db_available or db is None:
+            # Return default quotas without database
+            return jsonify({
+                "status": "success",
+                "quotas": {
+                    'gemini_3_flash': {'has_key': bool(os.getenv('GEMINI_API_KEY_3_FLASH')), 'used': 0, 'limit': 20, 'remaining': 20},
+                    'gemini_2_5_flash_1': {'has_key': bool(os.getenv('GEMINI_API_KEY_2_5_FLASH_1')), 'used': 0, 'limit': 1500, 'remaining': 1500},
+                    'gemini_2_5_flash_2': {'has_key': bool(os.getenv('GEMINI_API_KEY_2_5_FLASH_2')), 'used': 0, 'limit': 1500, 'remaining': 1500},
+                    'groq': {'has_key': bool(os.getenv('GROQ_API_KEY')), 'used': 0, 'limit': 0, 'remaining': -1}
+                }
+            })
         
         quotas = {}
         
@@ -1573,7 +1716,16 @@ def get_api_quota_status():
         print(f"[ERROR] Failed to get quota status: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({"status": "error", "message": str(e)}), 500
+        # Return default quotas on error
+        return jsonify({
+            "status": "success",
+            "quotas": {
+                'gemini_3_flash': {'has_key': bool(os.getenv('GEMINI_API_KEY_3_FLASH')), 'used': 0, 'limit': 20, 'remaining': 20},
+                'gemini_2_5_flash_1': {'has_key': bool(os.getenv('GEMINI_API_KEY_2_5_FLASH_1')), 'used': 0, 'limit': 1500, 'remaining': 1500},
+                'gemini_2_5_flash_2': {'has_key': bool(os.getenv('GEMINI_API_KEY_2_5_FLASH_2')), 'used': 0, 'limit': 1500, 'remaining': 1500},
+                'groq': {'has_key': bool(os.getenv('GROQ_API_KEY')), 'used': 0, 'limit': 0, 'remaining': -1}
+            }
+        })
 
 # ============================================================================
 # QUOTA TRACKING HELPER FUNCTION

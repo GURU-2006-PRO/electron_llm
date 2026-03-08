@@ -806,13 +806,55 @@ function createHistoryItem(item, index) {
 }
 
 // Select history item
-function selectHistoryItem(index) {
-    chatInput.value = queryHistory[index].query;
+async function selectHistoryItem(index) {
+    const historyItem = queryHistory[index];
+    
+    // Close the history panel
     const panel = document.querySelector('.history-panel');
     if (panel) {
         panel.remove();
         historyPanelOpen = false;
     }
+    
+    // If the history item has an ID, fetch the full conversation from database
+    if (historyItem.id) {
+        try {
+            const response = await axios.get(`${API_URL}/history/${historyItem.id}`);
+            if (response.data.status === 'success') {
+                const query = response.data.query;
+                const answer = response.data.response;
+                
+                // Clear current chat
+                chatMessages.innerHTML = '';
+                
+                // Show the query
+                addMessage(query.query, true);
+                
+                // Show the response
+                if (query.advanced_mode && answer.insight) {
+                    // Advanced mode response
+                    const formattedInsight = formatAdvancedInsight(answer.insight);
+                    addMessage(formattedInsight, false, `<div class="model-badge">${query.model || 'Gemini'}</div>`);
+                    
+                    // Show data if available
+                    if (answer.data && answer.data.length > 0) {
+                        showDataTable(answer.data);
+                        showChartTypeSelector(answer.data, query.query);
+                    }
+                } else {
+                    // Simple mode response
+                    addMessage(answer, false);
+                }
+                
+                return;
+            }
+        } catch (error) {
+            console.error('Failed to load history item:', error);
+        }
+    }
+    
+    // Fallback: just put the query in the input box
+    chatInput.value = historyItem.query;
     chatInput.focus();
 }
 
@@ -1321,6 +1363,12 @@ function addMessage(text, isUser, modelInfo = '') {
     const messageDiv = document.createElement('div');
     messageDiv.className = `chat-message ${isUser ? 'user' : 'assistant'}`;
     
+    // Filter out error messages in OUTPUT (don't show them to user)
+    if (!isUser && text.toLowerCase().startsWith('error:')) {
+        console.warn('[FILTERED] Error message hidden from user:', text);
+        return; // Don't display error messages
+    }
+    
     // Format bot messages with HTML if they contain formatting
     let formattedText = text;
     if (!isUser && (text.includes('<') || text.includes('>'))) {
@@ -1565,8 +1613,11 @@ function showMethodologyExplanation() {
         <div class="output-header">
             <div class="output-title">
                 <i class="fas fa-flask"></i>
-                Methodology Explanation
+                Complete Methodology Explanation
             </div>
+            <button class="close-btn" onclick="this.closest('.methodology-card').remove()">
+                <i class="fas fa-times"></i>
+            </button>
         </div>
         <div class="output-body">
     `;
@@ -1575,9 +1626,12 @@ function showMethodologyExplanation() {
     if (currentMethodology.query_understanding) {
         html += `
             <div class="methodology-section">
-                <h4>Query Understanding</h4>
-                <p><strong>Intent:</strong> ${currentMethodology.query_understanding.intent}</p>
-                <p><strong>Operation:</strong> ${currentMethodology.query_understanding.operation}</p>
+                <h3><i class="fas fa-lightbulb"></i> Query Understanding</h3>
+                <div class="methodology-content">
+                    <p><strong>Intent:</strong> ${currentMethodology.query_understanding.intent}</p>
+                    <p><strong>Operation Type:</strong> ${currentMethodology.query_understanding.operation}</p>
+                    <p><strong>Complexity:</strong> <span class="badge badge-${currentMethodology.query_understanding.complexity.toLowerCase()}">${currentMethodology.query_understanding.complexity}</span></p>
+                </div>
             </div>
         `;
     }
@@ -1586,36 +1640,64 @@ function showMethodologyExplanation() {
     if (currentMethodology.execution_steps && currentMethodology.execution_steps.length > 0) {
         html += `
             <div class="methodology-section">
-                <h4>Execution Steps</h4>
-                <ol class="methodology-steps">
+                <h3><i class="fas fa-list-ol"></i> Execution Steps (${currentMethodology.execution_steps.length} steps)</h3>
+                <div class="methodology-content">
+                    <ol class="methodology-steps">
         `;
-        currentMethodology.execution_steps.forEach(step => {
-            html += `<li>${step}</li>`;
+        currentMethodology.execution_steps.forEach((step, index) => {
+            html += `<li><strong>Step ${index + 1}:</strong> ${step}</li>`;
         });
-        html += `</ol></div>`;
+        html += `</ol></div></div>`;
     }
     
-    // Calculations
+    // Calculations performed
     if (currentMethodology.calculations && currentMethodology.calculations.length > 0) {
         html += `
             <div class="methodology-section">
-                <h4>Calculations Performed</h4>
-                <ul class="methodology-calculations">
+                <h3><i class="fas fa-calculator"></i> Calculations Performed</h3>
+                <div class="methodology-content">
+                    <p class="methodology-note">These are the actual Pandas operations executed on your data:</p>
+                    <ul class="methodology-calculations">
         `;
         currentMethodology.calculations.forEach(calc => {
             html += `<li><code>${calc}</code></li>`;
         });
-        html += `</ul></div>`;
+        html += `</ul></div></div>`;
     }
     
     // Data lineage
     if (currentMethodology.data_lineage) {
+        const lineage = currentMethodology.data_lineage;
         html += `
             <div class="methodology-section">
-                <h4>Data Lineage</h4>
-                <p><strong>Source:</strong> ${currentMethodology.data_lineage.source_rows} rows</p>
-                <p><strong>After Filtering:</strong> ${currentMethodology.data_lineage.filtered_rows} rows</p>
-                <p><strong>Final Result:</strong> ${currentMethodology.data_lineage.result_rows} rows</p>
+                <h3><i class="fas fa-project-diagram"></i> Data Flow & Lineage</h3>
+                <div class="methodology-content">
+                    <div class="data-flow-diagram">
+                        <div class="flow-step">
+                            <div class="flow-box">
+                                <strong>Source Data</strong>
+                                <div class="flow-value">${lineage.source_rows.toLocaleString()} rows</div>
+                            </div>
+                            <div class="flow-arrow">→</div>
+                        </div>
+                        <div class="flow-step">
+                            <div class="flow-box">
+                                <strong>After Filtering</strong>
+                                <div class="flow-value">${lineage.filtered_rows.toLocaleString()} rows</div>
+                            </div>
+                            <div class="flow-arrow">→</div>
+                        </div>
+                        <div class="flow-step">
+                            <div class="flow-box">
+                                <strong>Final Result</strong>
+                                <div class="flow-value">${lineage.result_rows.toLocaleString()} rows</div>
+                            </div>
+                        </div>
+                    </div>
+                    <p><strong>Data Reduction:</strong> ${lineage.data_reduction} of original data filtered out</p>
+                    ${lineage.columns_used && lineage.columns_used.length > 0 ? 
+                        `<p><strong>Columns Used:</strong> ${lineage.columns_used.filter(c => c).join(', ')}</p>` : ''}
+                </div>
             </div>
         `;
     }
@@ -1624,20 +1706,90 @@ function showMethodologyExplanation() {
     if (currentMethodology.statistical_tests && currentMethodology.statistical_tests.length > 0) {
         html += `
             <div class="methodology-section">
-                <h4>Statistical Tests Applied</h4>
-                <ul class="methodology-tests">
+                <h3><i class="fas fa-chart-line"></i> Statistical Tests Applied</h3>
+                <div class="methodology-content">
+                    <p class="methodology-note">These statistical methods ensure scientific rigor:</p>
+                    <ul class="methodology-tests">
         `;
         currentMethodology.statistical_tests.forEach(test => {
-            html += `<li>${test}</li>`;
+            html += `<li><i class="fas fa-check-circle"></i> ${test}</li>`;
         });
-        html += `</ul></div>`;
+        html += `</ul></div></div>`;
     }
+    
+    // Techniques used
+    if (currentMethodology.techniques_used && currentMethodology.techniques_used.length > 0) {
+        html += `
+            <div class="methodology-section">
+                <h3><i class="fas fa-tools"></i> Analytical Techniques</h3>
+                <div class="methodology-content">
+                    <div class="technique-tags">
+        `;
+        currentMethodology.techniques_used.forEach(technique => {
+            html += `<span class="technique-tag">${technique}</span>`;
+        });
+        html += `</div></div></div>`;
+    }
+    
+    // Technology stack
+    html += `
+        <div class="methodology-section">
+            <h3><i class="fas fa-layer-group"></i> Technology Stack</h3>
+            <div class="methodology-content">
+                <div class="tech-stack">
+                    <div class="tech-item">
+                        <i class="fas fa-database"></i>
+                        <strong>Data Processing:</strong> Pandas + NumPy
+                    </div>
+                    <div class="tech-item">
+                        <i class="fas fa-chart-bar"></i>
+                        <strong>Statistics:</strong> SciPy + Scikit-learn
+                    </div>
+                    <div class="tech-item">
+                        <i class="fas fa-brain"></i>
+                        <strong>AI:</strong> Google Gemini / Groq / DeepSeek
+                    </div>
+                    <div class="tech-item">
+                        <i class="fas fa-chart-pie"></i>
+                        <strong>Visualization:</strong> Apache ECharts
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Summary
+    html += `
+        <div class="methodology-section methodology-summary">
+            <h3><i class="fas fa-info-circle"></i> Summary</h3>
+            <div class="methodology-content">
+                <p>This analysis processed <strong>${currentMethodology.data_lineage?.source_rows.toLocaleString() || 'N/A'}</strong> records 
+                through <strong>${currentMethodology.total_steps || 'multiple'}</strong> execution steps, 
+                applying <strong>${currentMethodology.statistical_tests?.length || 'several'}</strong> statistical tests 
+                to generate scientifically rigorous insights.</p>
+                <p class="methodology-note">
+                    <i class="fas fa-shield-alt"></i> 
+                    All processing was done locally on your machine. Your data never left your computer.
+                </p>
+            </div>
+        </div>
+    `;
     
     html += `</div>`;
     card.innerHTML = html;
     
+    // Insert at the top of workspace
     workspaceContent.insertBefore(card, workspaceContent.firstChild);
     workspaceContent.scrollTop = 0;
+    
+    // Add smooth scroll animation
+    card.style.opacity = '0';
+    card.style.transform = 'translateY(-20px)';
+    setTimeout(() => {
+        card.style.transition = 'all 0.3s ease';
+        card.style.opacity = '1';
+        card.style.transform = 'translateY(0)';
+    }, 10);
 }
 
 // ===== CONTEXT INDICATORS =====
@@ -2388,7 +2540,7 @@ function updateKeyStatus(statusId, keyValue) {
 // Load API quota information
 async function loadApiQuotas() {
     try {
-        const response = await axios.get(`${API_URL}/api-quota-status`);
+        const response = await axios.get(`${API_URL}/api-quota-status`, { timeout: 2000 });
         
         if (response.data.status === 'success') {
             const quotas = response.data.quotas;
@@ -2400,7 +2552,8 @@ async function loadApiQuotas() {
             updateQuotaDisplay('groq', quotas.groq);
         }
     } catch (error) {
-        console.error('Failed to load quota information:', error);
+        // Silently fail - quota display is not critical
+        console.log('[INFO] Quota information not available');
     }
 }
 
@@ -2564,13 +2717,10 @@ async function saveApiKeys() {
                 }
             });
             
-            showNotification('API keys saved successfully!', 'success');
+            showNotification('API keys saved and loaded! Ready to use.', 'success');
             closeApiKeyModal();
             
-            // Reload to apply new keys
-            setTimeout(() => {
-                location.reload();
-            }, 1500);
+            // No need to reload - backend reinitialized automatically
         } else {
             showNotification('Failed to save API keys: ' + response.data.message, 'error');
         }

@@ -34,6 +34,10 @@ class GeminiManager:
         
         # Initialize all models
         for model_id, config in self.models.items():
+            if not config['key'] or config['key'] == '':
+                print(f"[SKIP] {config['display_name']} - no API key provided")
+                continue
+                
             try:
                 genai.configure(api_key=config['key'])
                 config['model_instance'] = genai.GenerativeModel(config['model_name'])
@@ -47,6 +51,14 @@ class GeminiManager:
             model_id = 'gemini-3-flash'  # Default
         
         config = self.models[model_id]
+        
+        # Check if key exists
+        if not config['key'] or config['key'] == '':
+            raise Exception(f"No API key configured for {config['display_name']}")
+        
+        # Check if model was initialized
+        if config['model_instance'] is None:
+            raise Exception(f"{config['display_name']} not initialized - invalid API key")
         
         # Reconfigure with the correct key before returning
         genai.configure(api_key=config['key'])
